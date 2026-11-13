@@ -47,7 +47,7 @@ function readSafeArea(): Insets {
   return insets;
 }
 
-function useRealmViewport(): RealmViewport {
+export function useRealmViewport(): RealmViewport {
   const read = () => ({ width: window.innerWidth, height: window.innerHeight, safe: readSafeArea() });
   const [viewport, setViewport] = useState(read);
   useEffect(() => {

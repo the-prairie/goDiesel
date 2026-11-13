@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import {
+  APP_PATHS,
   decodedRouteSlug,
   overlandEntryPath,
   overlandRealmPath,
@@ -33,7 +34,9 @@ import { WORLD_MAP, buildOverlandTowns, spreadTowns, type OverlandTown } from "@
 import { placeLook } from "@/labs/overland/model/place-biomes";
 import { normaliseRouteLine } from "@/labs/overland/model/route-line";
 import type { JumpTransition } from "@/labs/overland/overland-jump-state";
-import { OverlandJump } from "@/labs/overland/overland-jump";
+import { OverlandJump, useRealmViewport } from "@/labs/overland/overland-jump";
+import { phoneWorldScreen } from "@/labs/overland/model/world-screen";
+import { PHONE_QUERY } from "@/labs/overland/model/world-screen";
 import { OverlandTownView } from "@/labs/overland/overland-town";
 import { townBySlug, townSlug } from "@/labs/overland/model/town-input";
 import { ArrowIcon, Device, Key, PixelLabel } from "@/labs/overland/overland-ui";
@@ -41,6 +44,17 @@ import { entryBoxText, entryFacts, formatEntryDate, pageLines, routeNumberLabel 
 import { RouteNotFound } from "@/ui/route-not-found";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
 import "./overland.css";
+
+function subscribePhone(onChange: () => void) {
+  const query = window.matchMedia(PHONE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+/** Read during render, so a phone never paints the handheld first. */
+function usePhone() {
+  return useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
+}
 
 const ENTRIES = buildOverlandEntries(routes);
 // Close places are drawn apart so each town stays visible and tappable.
@@ -119,27 +133,37 @@ function worldLines(selected: OverlandTown | undefined) {
   return [`${plural(TOWNS.length, "town")} · ${plural(ENTRIES.length, "route")}`, `Latest: ${TOWNS[HOME_TOWN]?.name ?? ""}`];
 }
 
-function clampCamera(x: number, y: number) {
-  const viewHeight = WORLD_HEIGHT - WORLD_BOX_HEIGHT;
+/** The world screen in pixels: the handheld's, or a phone's whole screen. */
+interface ScreenSize {
+  cols: number;
+  rows: number;
+}
+
+const HANDHELD: ScreenSize = { cols: SCREEN_WIDTH, rows: WORLD_HEIGHT };
+
+function clampCamera(x: number, y: number, screen: ScreenSize) {
+  const viewHeight = screen.rows - WORLD_BOX_HEIGHT;
   return {
-    x: Math.min(Math.max(x, 0), WORLD_MAP.width - SCREEN_WIDTH),
-    y: Math.min(Math.max(y, 0), WORLD_MAP.height - viewHeight),
+    x: Math.min(Math.max(x, 0), WORLD_MAP.width - screen.cols),
+    y: Math.min(Math.max(y, 0), Math.max(0, WORLD_MAP.height - viewHeight)),
   };
 }
 
-function cameraOn(town: OverlandTown | undefined) {
+function cameraOn(town: OverlandTown | undefined, screen: ScreenSize) {
   if (!town) return { x: 0, y: 0 };
-  return clampCamera(town.x - SCREEN_WIDTH / 2, town.y - (WORLD_HEIGHT - WORLD_BOX_HEIGHT) / 2);
+  return clampCamera(town.x - screen.cols / 2, town.y - (screen.rows - WORLD_BOX_HEIGHT) / 2, screen);
 }
 
 function WorldMap({
   scale,
+  screen,
   selected,
   reducedMotion,
   onSelect,
   onOpen,
 }: {
   scale: number;
+  screen: ScreenSize;
   selected: number;
   reducedMotion: boolean;
   onSelect: (index: number) => void;
@@ -147,15 +171,16 @@ function WorldMap({
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLDivElement>(null);
-  const camera = useRef(cameraOn(TOWNS[selected] ?? TOWNS[HOME_TOWN]));
+  const camera = useRef(cameraOn(TOWNS[selected] ?? TOWNS[HOME_TOWN], screen));
   const target = useRef(camera.current);
   const drag = useRef<{ id: number; x: number; y: number; camX: number; camY: number; moved: boolean } | null>(null);
   const lines = worldLines(TOWNS[selected]);
   const shownAt = useTypedText(lines, reducedMotion);
 
   useEffect(() => {
-    if (selected >= 0) target.current = cameraOn(TOWNS[selected]);
-  }, [selected]);
+    if (selected >= 0) target.current = cameraOn(TOWNS[selected], screen);
+    else target.current = clampCamera(target.current.x, target.current.y, screen);
+  }, [screen, selected]);
 
   usePixelLoop(canvas, (context, now) => {
     if (!drag.current) {
@@ -177,6 +202,8 @@ function WorldMap({
       lines,
       shown: shownAt(performance.now()),
       now,
+      width: screen.cols,
+      height: screen.rows,
     });
   }, reducedMotion);
 
@@ -193,7 +220,7 @@ function WorldMap({
         className="overland-pan"
         data-mask={WORLD_MASK_ID}
         data-testid="overland-world"
-        height={WORLD_HEIGHT}
+        height={screen.rows}
         onKeyDown={(event) => {
           if (event.key === "ArrowRight" || event.key === "ArrowDown") step(1);
           else if (event.key === "ArrowLeft" || event.key === "ArrowUp") step(-1);
@@ -211,7 +238,7 @@ function WorldMap({
           const dx = (event.clientX - current.x) / scale;
           const dy = (event.clientY - current.y) / scale;
           if (Math.hypot(dx, dy) > 2) current.moved = true;
-          camera.current = clampCamera(current.camX - dx, current.camY - dy);
+          camera.current = clampCamera(current.camX - dx, current.camY - dy, screen);
           target.current = camera.current;
         }}
         onPointerUp={() => {
@@ -222,11 +249,11 @@ function WorldMap({
         }}
         ref={canvas}
         role="img"
-        style={{ width: SCREEN_WIDTH * scale, height: WORLD_HEIGHT * scale }}
+        style={{ width: screen.cols * scale, height: screen.rows * scale }}
         tabIndex={0}
-        width={SCREEN_WIDTH}
+        width={screen.cols}
       />
-      <div className="overland-view" style={{ width: SCREEN_WIDTH * scale, height: (WORLD_HEIGHT - WORLD_BOX_HEIGHT) * scale }}>
+      <div className="overland-view" style={{ width: screen.cols * scale, height: (screen.rows - WORLD_BOX_HEIGHT) * scale }}>
         <div className="overland-towns" data-testid="overland-towns" ref={layer} style={{ width: WORLD_MAP.width * scale, height: WORLD_MAP.height * scale }}>
           {TOWNS.map((town, index) => (
             <button
@@ -236,7 +263,7 @@ function WorldMap({
               key={town.name}
               onClick={() => onSelect(index)}
               onFocus={() => {
-                target.current = cameraOn(town);
+                target.current = cameraOn(town, screen);
               }}
               style={{ left: town.x * scale, top: town.y * scale, width: 14 * scale, height: 14 * scale }}
               type="button"
@@ -287,10 +314,10 @@ function IndexRow({ entry, scale, onOpen }: { entry: OverlandEntry; scale: numbe
   );
 }
 
-function RouteIndex({ scale, town, onOpenEntry }: { scale: number; town?: OverlandTown; onOpenEntry: (slug: string) => void }) {
+function RouteIndex({ scale, town, onOpenEntry, height }: { scale: number; town?: OverlandTown; onOpenEntry: (slug: string) => void; height?: number }) {
   const list = town ? NEWEST_FIRST.filter((entry) => entry.place === town.name) : NEWEST_FIRST;
   return (
-    <div className="overland-index" data-testid="overland-index" style={{ width: SCREEN_WIDTH * scale, height: WORLD_HEIGHT * scale }}>
+    <div className="overland-index" data-testid="overland-index" style={{ width: SCREEN_WIDTH * scale, height: height ?? WORLD_HEIGHT * scale }}>
       <IndexHeader count={list.length} scale={scale} town={town} />
       <ol aria-label={town ? `Routes in ${town.name}` : "All routes"}>
         {list.map((entry) => (
@@ -301,7 +328,21 @@ function RouteIndex({ scale, town, onOpenEntry }: { scale: number; town?: Overla
   );
 }
 
-function World({ scale, reducedMotion }: { scale: number; reducedMotion: boolean }) {
+/**
+ * The world, on a phone, fills the screen: the map at a whole-pixel scale
+ * edge to edge, its text box and the keys at the bottom in thumb reach, the
+ * safe areas clear. In the handheld frame otherwise.
+ */
+function usePhoneScreen(phone: boolean) {
+  const viewport = useRealmViewport();
+  return useMemo(() => (phone ? phoneWorldScreen(viewport) : null), [phone, viewport]);
+}
+
+function World({ scale: handheldScale, reducedMotion }: { scale: number; reducedMotion: boolean }) {
+  const phone = usePhone();
+  const phoneScreen = usePhoneScreen(phone);
+  const scale = phoneScreen?.scale ?? handheldScale;
+  const screen = useMemo<ScreenSize>(() => (phoneScreen ? { cols: phoneScreen.cols, rows: phoneScreen.rows } : HANDHELD), [phoneScreen]);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const townName = searchParams.get("town") ?? undefined;
@@ -336,6 +377,14 @@ function World({ scale, reducedMotion }: { scale: number; reducedMotion: boolean
 
   return (
     <Device
+      bare={phone}
+      corner={
+        phone ? (
+          <Key className="overland-exit" label="Leave Overland" onClick={() => navigate(APP_PATHS.atlas)}>
+            <PixelLabel scale={2} text="Exit" />
+          </Key>
+        ) : null
+      }
       keys={
         <>
           <div className="overland-key-group">
@@ -365,9 +414,14 @@ function World({ scale, reducedMotion }: { scale: number; reducedMotion: boolean
       }
     >
       {view === "map" ? (
-        <WorldMap onOpen={openTown} onSelect={select} reducedMotion={reducedMotion} scale={scale} selected={selected} />
+        <WorldMap onOpen={openTown} onSelect={select} reducedMotion={reducedMotion} scale={scale} screen={screen} selected={selected} />
       ) : (
-        <RouteIndex onOpenEntry={openEntry} scale={scale} town={town} />
+        <RouteIndex
+          height={phoneScreen ? phoneScreen.rows * phoneScreen.scale : undefined}
+          onOpenEntry={openEntry}
+          scale={phoneScreen ? Math.max(2, Math.floor((phoneScreen.cols * phoneScreen.scale) / SCREEN_WIDTH)) : scale}
+          town={town}
+        />
       )}
     </Device>
   );
@@ -572,7 +626,7 @@ export function OverlandLabPage() {
   if (routeSlug && !entry) return <RouteNotFound />;
 
   return (
-    <div className="overland" data-testid="overland" inert={realm}>
+    <div className="overland overland-phone-ready" data-testid="overland" inert={realm}>
       {entry ? null : <h1 className="sr-only">Overland</h1>}
       {entry ? (
         <Entry entry={entry} key={entry.slug} realm={realm} reducedMotion={reducedMotion} scale={scale} />

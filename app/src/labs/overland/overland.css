@@ -856,3 +856,65 @@
   min-width: 56px;
   padding: 0 12px;
 }
+
+/* ---------------------------------------------------------------- on a phone */
+
+/* Overland is a full-screen game on a phone: it covers the app's tab bar, as
+   its 3D towns and worlds already do, and offers its own way out. A phone
+   held sideways counts: the media query matches PHONE_QUERY. */
+@media (max-width: 767px), (max-height: 520px) {
+  .overland {
+    inset: 0;
+    z-index: var(--z-overlay);
+  }
+}
+
+.overland-phone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--safe-area-top, 0px) var(--safe-area-right, 0px) var(--safe-area-bottom, 0px) var(--safe-area-left, 0px);
+  background: linear-gradient(180deg, #2a3348 0%, #1d2433 100%);
+}
+
+.overland-phone .overland-screen {
+  flex: none;
+  border-radius: 0;
+  background: #4b8fd6;
+}
+
+.overland-phone-corner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+.overland-phone-corner .overland-key {
+  height: 44px;
+  min-width: 56px;
+  padding: 0 12px;
+}
+
+.overland-phone-keys {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0;
+  padding: 12px max(12px, var(--safe-area-left, 0px)) 12px max(12px, var(--safe-area-right, 0px));
+  background: linear-gradient(180deg, #fbfbf8 0%, var(--ov-shell) 40%, var(--ov-shell-2) 100%);
+}
+
+@media (max-width: 380px) {
+  .overland-phone-keys {
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .overland-phone-keys .overland-key-square {
+    min-width: 44px;
+    padding: 0 10px;
+  }
+}

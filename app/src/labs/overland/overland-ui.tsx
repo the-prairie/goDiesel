@@ -52,7 +52,23 @@ export function Key({
   );
 }
 
-export function Device({ children, keys }: { children: ReactNode; keys: ReactNode }) {
+/**
+ * The handheld: a screen in its glass with the keys below. `bare` drops the
+ * shell for a phone, where the screen fills the display and the keys sit in
+ * a bar at the bottom; `corner` is a key laid over the screen's top right.
+ */
+export function Device({ children, keys, bare = false, corner }: { children: ReactNode; keys: ReactNode; bare?: boolean; corner?: ReactNode }) {
+  if (bare) {
+    return (
+      <div className="overland-phone">
+        <div className="overland-screen overland-phone-screen">
+          {children}
+          {corner ? <div className="overland-phone-corner">{corner}</div> : null}
+        </div>
+        <div className="overland-keys overland-phone-keys">{keys}</div>
+      </div>
+    );
+  }
   return (
     <div className="overland-device">
       <div className="overland-glass">

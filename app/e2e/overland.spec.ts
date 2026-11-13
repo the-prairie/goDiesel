@@ -114,3 +114,35 @@ for (const width of [390, 1440]) {
     }
   });
 }
+
+for (const [width, height] of [[375, 812], [390, 844], [375, 667], [812, 375]] as const) {
+  test(`on a ${width}x${height} phone the world fills the screen, keys at the bottom, the app's tab bar covered`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    await page.goto(`/#/lab/overland?town=${encodeURIComponent(KYOTO)}`);
+    const canvas = page.getByTestId("overland-world");
+    await expect(canvas).toBeVisible();
+    const map = (await canvas.boundingBox())!;
+    // Edge to edge, within a pixel of the screen's scale, from the top.
+    expect(map.x).toBeLessThanOrEqual(4);
+    expect(map.width).toBeGreaterThanOrEqual(width - 4);
+    expect(map.height).toBeGreaterThan(height * 0.6);
+    // Every key is on screen, below the map, at least 44 px.
+    for (const name of ["Previous town", "Next town", "Map", "Index", "Open"]) {
+      const key = (await page.getByRole("button", { name, exact: true }).boundingBox())!;
+      expect(key.y, name).toBeGreaterThanOrEqual(map.y + map.height);
+      expect(key.y + key.height, name).toBeLessThanOrEqual(height);
+      expect(key.x + key.width, name).toBeLessThanOrEqual(width);
+      expect(key.height, name).toBeGreaterThanOrEqual(44);
+    }
+    // Nothing of the app's navigation shows through: the game covers it.
+    const bottom = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("nav, aside") === null, [width / 2, height - 2]);
+    expect(bottom).toBe(true);
+    const overflow = await page.evaluate(() => ({ x: document.documentElement.scrollWidth - innerWidth, y: document.documentElement.scrollHeight - innerHeight }));
+    expect(overflow).toEqual({ x: 0, y: 0 });
+    // Its own way out.
+    await page.getByRole("button", { name: "Leave Overland" }).click();
+    await expect(page).toHaveURL(/#\/atlas/);
+    await context.close();
+  });
+}

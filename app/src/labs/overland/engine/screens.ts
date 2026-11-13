@@ -58,11 +58,14 @@ export interface WorldFrame {
   shown: number;
   /** Animation clock in milliseconds; frozen at 0 with reduced motion. */
   now: number;
+  /** The screen's size in pixels; the handheld's by default, larger on a phone. */
+  width?: number;
+  height?: number;
 }
 
 export function drawWorldScreen(context: Ctx, frame: WorldFrame) {
-  const w = SCREEN_WIDTH;
-  const h = WORLD_HEIGHT;
+  const w = frame.width ?? SCREEN_WIDTH;
+  const h = frame.height ?? WORLD_HEIGHT;
   const world = worldFrames()[Math.floor(frame.now / 700) % 2];
   const cx = Math.round(frame.camX);
   const cy = Math.round(frame.camY);
