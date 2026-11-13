@@ -279,6 +279,24 @@ export function sketchStyle({ look, reveal, explored }: SketchStyleInput): Style
       filter: transport(["rail", "transit"]),
       paint: { "line-color": L.ink, "line-width": width(1, [[13, 2.5], [16, 5], [19, 9]]), "line-dasharray": [0.15, 2.5] },
     },
+    // A bridge's railings, either side of its deck, from the data's bridges.
+    ...(["left", "right"] as const).map(
+      (side): LayerSpecification => ({
+        id: `bridge-railing-${side}`,
+        type: "line",
+        source: "openmaptiles",
+        "source-layer": "transportation",
+        minzoom: 14,
+        filter: ["==", ["get", "brunnel"], "bridge"],
+        layout: { "line-join": "round" },
+        paint: {
+          "line-color": L.ink,
+          "line-width": width(L.weight, [[14, 0.6], [18, 1.4]]),
+          "line-offset": width(side === "left" ? -1 : 1, [[14, 3], [16, 7], [19, 20]]),
+          "line-blur": L.blur,
+        },
+      }),
+    ),
     {
       // Far out, a building is its drawn footprint.
       id: "building-plan",
@@ -310,14 +328,15 @@ export function sketchStyle({ look, reveal, explored }: SketchStyleInput): Style
       type: "line",
       source: "sketch-routes",
       layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": L.paper, "line-width": width(1, [[8, 4], [14, 7], [18, 13]]), "line-opacity": 0.9 },
+      // Close up the edge layer draws the route on the ground; this flat line gives way.
+      paint: { "line-color": L.paper, "line-width": width(1, [[8, 4], [14, 7], [18, 13]]), "line-opacity": ["interpolate", ["linear"], ["zoom"], 14.6, 0.9, 15.5, 0] },
     },
     {
       id: "route-line",
       type: "line",
       source: "sketch-routes",
       layout: { "line-cap": "round", "line-join": "round" },
-      paint: { "line-color": REAL.route, "line-width": width(1, [[8, 2], [14, 3.5], [18, 7]]) },
+      paint: { "line-color": REAL.route, "line-width": width(1, [[8, 2], [14, 3.5], [18, 7]]), "line-opacity": ["interpolate", ["linear"], ["zoom"], 14.6, 1, 15.5, 0] },
     },
     {
       id: "place-label",

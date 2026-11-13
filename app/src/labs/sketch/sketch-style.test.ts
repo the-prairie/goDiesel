@@ -53,6 +53,23 @@ describe("sketchStyle", () => {
     expect(json(s.sources["sketch-routes"])).toContain("17636880071");
   });
 
+  it("hands her route to the ground drawing close up: the flat line fades out as buildings stand up", () => {
+    for (const id of ["route-line", "route-casing"]) {
+      const opacity = json((layer(style("line", "corridor"), id) as { paint: Record<string, unknown> }).paint["line-opacity"]);
+      expect(opacity, id).toContain("zoom");
+      expect(opacity, id).toMatch(/15\.5,0/);
+    }
+  });
+
+  it("draws a bridge's railings either side of its deck, from the data's bridges", () => {
+    const s = style("line", "line");
+    for (const id of ["bridge-railing-left", "bridge-railing-right"]) {
+      const railing = layer(s, id) as { filter: unknown; paint: Record<string, unknown> };
+      expect(json(railing.filter), id).toContain('"bridge"');
+      expect(railing.paint["line-offset"], id).toBeDefined();
+    }
+  });
+
   it("reveals nothing but the line itself in line mode", () => {
     expect(json(style("line", "line").layers)).not.toContain('"feature-state"');
     expect(layer(style("line", "line"), "explored-wash")).toBeUndefined();

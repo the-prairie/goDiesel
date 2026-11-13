@@ -207,6 +207,26 @@ export function readBuildings(data: Uint8Array): TileBuilding[] {
  */
 export const REVEAL_LAYERS = ["water", "waterway", "park"];
 
+/** Parks, and woods from the land cover: polygons (outer ring first), tile units. */
+export function readParks(data: Uint8Array): [number, number][][][] {
+  const out: [number, number][][][] = [];
+  const layers = readLayers(data, ["park", "landcover"]);
+  for (const [name, layer] of layers) {
+    for (const feature of layer.features) {
+      if (feature.type !== 3) continue;
+      if (name === "landcover" && !["wood", "forest"].includes(String(feature.props.class))) continue;
+      let current: [number, number][][] | null = null;
+      for (const ring of decodeRings(feature.geometry, true)) {
+        if (signedArea(ring) > 0 || !current) {
+          current = [ring];
+          out.push(current);
+        } else current.push(ring);
+      }
+    }
+  }
+  return out;
+}
+
 export interface ExploredId {
   layer: string;
   id: number;

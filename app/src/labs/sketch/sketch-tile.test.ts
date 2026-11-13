@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dropTileEdges, exploredIds, readBuildings } from "@/labs/sketch/sketch-tile";
+import { dropTileEdges, exploredIds, readBuildings, readParks } from "@/labs/sketch/sketch-tile";
 
 // A minimal protobuf writer, to build vector tiles for the tests.
 const varint = (value: number) => {
@@ -158,5 +158,29 @@ describe("exploredIds", () => {
   it("counts a road that crosses the route as near, though its ends are far", () => {
     const data = new Uint8Array(lineLayer("transportation", [[[2000, 0], [2000, 4000]]]));
     expect(exploredIds(data, [[[0, 1000], [4096, 1000]]], 50, ["transportation"])).toEqual([{ layer: "transportation", id: 100, level: 2 }]);
+  });
+});
+
+describe("readParks", () => {
+  /** A polygon layer whose features carry a class. */
+  function polygonLayer(name: string, features: { ring: [number, number][]; kind: string }[]) {
+    const kinds = [...new Set(features.map((feature) => feature.kind))];
+    const featureBytes = features.map((feature, index) =>
+      bytes(2, [...uint(1, 200 + index), ...packed(2, [0, kinds.indexOf(feature.kind)]), ...uint(3, 3), ...packed(4, rings([feature.ring]))]),
+    );
+    return bytes(3, [...uint(15, 2), ...text(1, name), ...featureBytes.flat(), ...text(3, "class"), ...kinds.flatMap((kind) => bytes(4, text(1, kind))), ...uint(5, 4096)]);
+  }
+
+  it("reads parks, and woods from the land cover, but not grass or farmland", () => {
+    const data = new Uint8Array([
+      ...polygonLayer("park", [{ ring: box(0, 0, 100), kind: "park" }]),
+      ...polygonLayer("landcover", [
+        { ring: box(200, 200, 50), kind: "wood" },
+        { ring: box(400, 400, 50), kind: "farmland" },
+      ]),
+    ]);
+    const parks = readParks(data);
+    expect(parks).toHaveLength(2);
+    expect(parks[1][0][0]).toEqual([200, 200]);
   });
 });

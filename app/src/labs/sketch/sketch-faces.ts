@@ -1,10 +1,8 @@
-// The explored buildings in colour: roofs and walls of the buildings near her
-// routes, drawn by the edge layer over MapLibre's white forms. OpenFreeMap
+// Which buildings are explored, and the colours they come back in. OpenFreeMap
 // merges a tile's buildings into a few large features, so colouring by
-// feature would colour whole districts; these are made building by building.
-
-/** Per vertex: x, y, z, red, green, blue, strength (how strongly revealed). */
-export const FACE_STRIDE = 7;
+// feature would colour whole districts; buildings are judged one by one here
+// and drawn in colour by the edge layer (see sketch-massing). Also the roof
+// triangulation the drawn buildings use.
 
 export interface Footprint {
   rings: [number, number][][];
@@ -56,31 +54,6 @@ export function triangulate(raw: readonly [number, number][]): number[] {
   }
   for (let i = 1; i + 1 < order.length; i += 1) out.push(order[0], order[i], order[i + 1]);
   return out;
-}
-
-/** A building's roof and walls, in its colour, walls shaded by which way they face. */
-export function buildingFaces(building: Footprint, colour: [number, number, number], strength: number): Float32Array {
-  const out: number[] = [];
-  const outer = building.rings[0];
-  const { height: top, minHeight: base } = building;
-  const vertex = (p: [number, number], z: number, shade: number) => out.push(p[0], p[1], z, colour[0] * shade, colour[1] * shade, colour[2] * shade, strength);
-  for (const index of triangulate(outer)) vertex(outer[index], top, 1);
-  const n = outer.length - 1;
-  for (let i = 0; i < n; i += 1) {
-    const a = outer[i];
-    const b = outer[i + 1];
-    // Light from the south-west of the map: walls facing it lighter.
-    const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-    const facing = ((b[1] - a[1]) / length) * 0.6 + ((a[0] - b[0]) / length) * 0.4;
-    const shade = 0.8 + 0.12 * Math.abs(facing);
-    vertex(a, base, shade);
-    vertex(b, base, shade);
-    vertex(b, top, shade);
-    vertex(a, base, shade);
-    vertex(b, top, shade);
-    vertex(a, top, shade);
-  }
-  return new Float32Array(out);
 }
 
 const segmentDistance2 = (px: number, py: number, s: number[]) => {

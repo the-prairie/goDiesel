@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FACE_STRIDE, buildingFaces, nearBuildings, triangulate } from "@/labs/sketch/sketch-faces";
+import { nearBuildings, triangulate } from "@/labs/sketch/sketch-faces";
 
 const square: [number, number][] = [
   [0, 0],
@@ -43,20 +43,6 @@ describe("triangulate", () => {
 
   it("works whichever way the ring winds", () => {
     expect(area(ell, triangulate([...ell].reverse()))).toBeCloseTo(300);
-  });
-});
-
-describe("buildingFaces", () => {
-  it("makes a roof and four walls for a box, coloured, the walls a shade darker", () => {
-    const faces = buildingFaces({ rings: [square], height: 12, minHeight: 0 }, [0.9, 0.8, 0.6], 1);
-    expect(faces.length / FACE_STRIDE).toBe(3 * (2 + 4 * 2));
-    // The roof comes first: two triangles, six vertices, all at the top.
-    const roofRed = faces[3];
-    expect(roofRed).toBeCloseTo(0.9);
-    for (let v = 0; v < 6; v += 1) expect(faces[v * FACE_STRIDE + 2]).toBe(12);
-    for (let i = 6 * FACE_STRIDE; i < faces.length; i += FACE_STRIDE) expect(faces[i + 3]).toBeLessThan(roofRed);
-    // Every vertex carries the reveal's strength.
-    for (let i = 0; i < faces.length; i += FACE_STRIDE) expect(faces[i + 6]).toBe(1);
   });
 });
 

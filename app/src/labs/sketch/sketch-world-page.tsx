@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import type { GeoJSONSource, Map as MapLibreMap, VectorTileSource } from "maplibre-gl";
 
 import { APP_PATHS, decodedRouteSlug, sketchRealmPath, sketchWorldPath } from "@/app/route-paths";
+import { loadRouteDetail } from "@/data/route-repository";
 import { routes } from "@/data/routes";
 import maplibregl from "@/providers/maplibre";
 import { CROSSFADE_MS, WIPE_STEP_MS } from "@/labs/overland/model/dither-wipe";
@@ -140,6 +141,12 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           map.addLayer(edges, "route-casing");
           edgesRef.current = edges;
           edges.setReveal(revealFor(revealRef.current));
+          edges.setRoutes(EXPLORED.map((route) => route.line));
+          // Her routes at full resolution, so close up they follow the streets she ran.
+          void Promise.all(ENTRIES.map((entry) => loadRouteDetail(entry.slug))).then((results) => {
+            const lines = results.flatMap((result) => (result.status === "ready" && result.route.route.length > 1 ? [result.route.route.map((point): [number, number] => [point.lng, point.lat])] : []));
+            if (lines.length && edgesRef.current === edges) edges.setRoutes(lines);
+          });
         } catch {
           if (map.getLayer("building-edges")) map.removeLayer("building-edges");
         }
