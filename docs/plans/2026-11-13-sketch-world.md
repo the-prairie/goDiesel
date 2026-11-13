@@ -163,3 +163,72 @@ lines it wraps to (measured, not guessed).
   1.6 million instanced strokes; that is the risk (see the report).
 - Bundle: the sketch's page and worker are 39.5 KiB, lazy, on top of the
   MapLibre chunk the app already loads on demand; budget 48 KiB.
+
+## Spike: the sketch as the real city (`#/lab/sketch-real`, lab only)
+
+**Status: experiment, not a feature. Not linked from anywhere.**
+
+> **POLICY UNVERIFIED.** Whether Google's Map Tiles API terms allow a
+> non-photorealistic shader over Photorealistic 3D Tiles has NOT been
+> confirmed. Nothing like this may leave the lab until Google (or counsel)
+> confirms it in writing.
+
+**What it is.** Google's Photorealistic 3D Tiles are rendered by our own
+Cesium 1.143 (already a dependency; its Google tileset loader and credit
+display are built in, so no new library). A Cesium post-process stage draws
+the frame as ink on paper:
+- dark lines where depth jumps (silhouettes);
+- creases where the rebuilt surface normal turns (corners, roof ridges);
+- finer lines from strong edges in the photo texture (windows, signs, road
+  markings), fading with distance.
+
+It runs per frame on the rendered image only. Nothing is extracted, saved
+or traced. One slider blends to the real colour. A corridor mode lets colour
+flood 70 m either side of route 064, measured per pixel on the ground plane.
+
+**Attribution.** Cesium shows the Google Maps logo and the data line built
+from each tile's copyright, with `showCreditsOnScreen`. The credits sit on a
+dark band, because Cesium's Google logo is drawn light for photographs and
+would vanish on paper. The Cesium logo is kept clear of Google's. The
+spike's panel sits top-left, away from the credits.
+
+**Measured (Chrome on this Mac, GPU).**
+
+| Measure | 1440×900 | 375×812 |
+|---|---|---|
+| First complete street view | 10.4 s | 5.4 s |
+| Requests for that view | 1,253 | 554 |
+| Data for that view | 70 MB | 30 MB |
+| Requests for a whole session (street, aerial, reveal) | 1,907 | 616 |
+| Data for a whole session | 108 MB | 32 MB |
+| Tileset memory | 383–510 MB | 236 MB |
+| JS heap | ~410 MB | ~257 MB |
+| Orbit frame time, median / p95 | 16.7 / 16.7 ms | 16.7 / 16.8 ms |
+
+**Policy passages read (13 Nov 2026).**
+
+From the Google Maps Platform Terms of Service, https://cloud.google.com/maps-platform/terms:
+- §3.2.1(a): "copy, modify, create a derivative work of, reverse engineer, decompile, translate, disassemble, or otherwise attempt to extract any or all of the source code".
+- §3.2.2(b): "Customer will not modify, obscure, or delete such attribution."
+- §3.2.3(a): "Customer will not export, extract, or otherwise scrape Google Maps Content for use outside the Services."
+- §3.2.3(c): "Customer will not create content based on Google Maps Content."
+
+From the Map Tiles API policies, https://developers.google.com/maps/documentation/tile/policies:
+- "You may not use Map Tiles API for any non-visualization use cases, such as: Image analysis …"
+- "you must not pre-fetch, index, store, or cache any Content except under the limited conditions stated in the terms."
+- "You may overlay your own 3D objects on Photorealistic 3D Tiles as long as the 3D objects aren't extracted, traced, or otherwise derived by hand or machine from Photorealistic 3D Tiles."
+- With CesiumJS, "you need to enable showCreditsOnScreen".
+- "you must not overlap or obscure the Google logo with any other logo, such as the renderer's logo."
+- "Maintain an accessible contrast between the logo and the background."
+
+The Service Specific Terms page (https://cloud.google.com/maps-platform/terms/maps-service-terms) had no Map Tiles API section when read.
+
+**My reading, low to moderate confidence.**
+- *For:* nothing found forbids changing how tiles look on screen. The use
+  stays a visualization, inside the Services, with nothing stored or
+  extracted, and the attribution is untouched.
+- *Against:* §3.2.3(c) "create content based on Google Maps Content" and
+  "image analysis" are broad. Edge detection on Google's imagery could be
+  read as either, and a heavily restyled scene could be read as modifying
+  the content.
+- Ask Google directly before shipping.
