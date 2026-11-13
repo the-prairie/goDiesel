@@ -795,3 +795,64 @@
 .overland-town-box-frame {
   position: relative;
 }
+
+.overland-moment {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  filter: drop-shadow(0 4px 0 rgba(13, 18, 28, 0.4));
+  animation: overland-moment-in 240ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@keyframes overland-moment-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overland-moment {
+    animation: none;
+  }
+}
+
+.overland-moment-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.overland-moment-photo {
+  display: block;
+  width: 68px;
+  min-height: 44px;
+  margin: 0;
+  padding: 3px 3px 10px;
+  border: 2px solid var(--ov-ink);
+  border-radius: 3px;
+  background: #f8f6ee;
+  cursor: pointer;
+}
+
+.overland-moment-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 96px;
+  object-fit: cover;
+}
+
+.overland-moment-photo:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: 2px;
+}
+
+.overland-moment .overland-key {
+  height: 44px;
+  min-width: 56px;
+  padding: 0 12px;
+}

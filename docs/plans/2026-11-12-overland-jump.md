@@ -49,6 +49,24 @@ The approved diorama (`goDiesel-brand-prototypes/overland-diorama/`) is now the 
 - Residents are placed but not drawn (another artist).
 - A frame-rate e2e on real hardware; the software renderer in CI is too slow to judge tiers, so tests pin `?quality=low` or reduced motion.
 
+### Her story in Overland (decisions from the route-story work)
+
+The owner: Strava routes are generic and do not carry the story or the vibe of a run. Her own titles, notes, photos and clips are woven in as commentary. Every word shown is hers or a plain fact (number, distance, date, place, the kind of moment); nothing is written for her. The existing annotation contract (`RouteAnnotation` in `domain/route/contract.ts`, parsed strictly by `detail-parse.ts`) is the only model.
+
+- **D30. The signpost is the trailer.** The chosen signpost's pixel box (`model/sign-story.ts` `signStoryPages`) shows her route number, her title exactly (emoji included, wrapped, never cut) and the distance and date on the first page; her note, the route's description, follows on pages of four lines, broken only between words and keeping her line breaks. Tapping the box, or Enter or Space on its page control, turns the page. A route without a note is one clean page with no page control. Her note is also the signpost's accessible description.
+- **D31. Photos at the signpost.** Up to three image annotations with media, in the order met along the route (`signPolaroids`), hang above the chosen signpost as pixel polaroids drawn from the photo in code (at most 20 pixels on the long side, nearest-neighbour). They appear for the chosen signpost only, because annotations live in the route detail, which choosing a signpost already fetches for its light (D26); fetching every route's detail to hang photos on every post was not worth the requests. Activating one opens the real photo in a dialog with her title and caption, clear of the attribution band; Close or Escape returns focus to the polaroid and leaves the town as it was.
+- **D32. Moments along the route.** The `overland-moments` lifecycle (`overland-moments-state.ts`, registered): per annotation `idle`, `approaching`, `showing`, `mediaOpen`, `dismissed`. A moment within 120 m ahead slows playback to 0.6×; reached, it shows in the game's text box under the route's box at 0.35× for 6 s of playing time (3.5 s while another waits), then tucks away and playback carries on. Opening its photo holds playback (play state kept) until the photo is closed; nothing else pauses it. OK puts a moment away early. Moments reached together queue in order. Scrubbing forward skips the moments passed; scrubbing back re-arms those now ahead and puts away one on screen. A paused replay neither meets new moments nor runs a moment's clock. The slowing is a time scale handed to the Google driver through a new optional `timeScale` option on `useGoogleReplayDriver` (default 1, so production Replay is unchanged).
+- **D33. Editorial is never shown as recorded fact.** A `hypothesis` annotation carries an "Editorial" tag in the pixel box and in the photo viewer, and ", editorial" in what a screen reader hears. Recorded, derived and measured annotations carry no tag, as on the route guide. The kind label and the distance are the only words we add.
+- **D34. Access.** A moment is announced in a polite live region with its kind, distance, title and words; its photo and its OK are real buttons of at least 44 px; with reduced motion it appears without sliding in. Escape in the photo viewer closes the photo and never leaves the 3D world or the town. Nothing of ours sits over Google's attribution band (e2e checks the moment's box).
+- **D35. Clips.** The contract has no video. The smallest extension: `RouteAnnotationMedia.kind?: "image" | "video"` (absent means image), where a video's `url` is a published MP4 and `thumbUrl` its poster, with an optional `durationS`; the strict parser accepts `video` only with a published path and a poster. In Overland a clip is a polaroid with a play mark; it plays only when opened, muted by default with its own controls and no autoplay, and opening it holds the replay like a photo. Not built: images ship now.
+- **The data today.** Two routes carry annotations. Her Kyoto run 065 has two recorded photos; they hang on its signpost and are met at 7.6 and 8.6 km. A Rome route carries four editorial notes, but it is `discovered`, not completed, so Overland does not show it; e2e uses a fixture on a completed route for the editorial case.
+
+### Her story: what remains
+
+- Clips (D35): the contract extension, the parser, the publisher's checks, and the player.
+- The "add a moment" authoring screen, importing Strava media, and the collecting stamps on the index. Out of scope for this pass.
+- Only 9 of her routes have a note and 2 have annotations; the story grows as she adds them.
+
 ## 1. Where Overland touches the app
 
 ### Routing

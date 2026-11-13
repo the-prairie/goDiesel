@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import type { QuestRoute } from "@/domain/route";
+import type { QuestRoute, RouteAnnotation } from "@/domain/route";
+import {
+  initialOverlandMomentsState,
+  momentTimeScale,
+  reduceOverlandMoments,
+  type OverlandMomentsEvent,
+} from "@/labs/overland/overland-moments-state";
+import { PhotoViewer, photoLabel } from "@/labs/overland/overland-photo";
 import { context2d, makeCanvas } from "@/labs/overland/engine/canvas";
 import { C } from "@/labs/overland/engine/palette";
 import { wrapForBox } from "@/labs/overland/engine/screens";
@@ -92,6 +99,68 @@ function drawTextBox(canvas: HTMLCanvasElement, lines: TextBoxLines) {
   }
 }
 
+const KIND_LABEL: Record<RouteAnnotation["kind"], string> = { note: "Note", landmark: "Landmark", warning: "Take care", image: "Photo" };
+
+function distanceLabel(metres: number) {
+  return metres < 1000 ? `${Math.round(metres)} m` : `${(metres / 1000).toFixed(1)} km`;
+}
+
+/**
+ * One of her moments, met on the route: her title and words in the game's
+ * text box, marked Editorial when it is interpretation, with its photo
+ * beside it. Nothing here is written by us but the kind and the distance.
+ */
+function MomentBox({ annotation, width, top, left, onOpenPhoto, onClose }: { annotation: RouteAnnotation; width: number; top: number; left: number; onOpenPhoto: () => void; onClose: () => void }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const scale = width < 420 ? 2 : 3;
+  const photoWidth = annotation.media ? 76 : 0;
+  const inner = Math.floor(Math.min(width - photoWidth - 8, 420) / scale);
+  const heading = `${KIND_LABEL[annotation.kind]} · ${distanceLabel(annotation.atDistanceM)}`;
+  const editorial = annotation.evidence === "hypothesis";
+  const title = annotation.title ? wrapForBox(annotation.title, inner - 16, true) : [];
+  const body = wrapForBox(annotation.body, inner - 16);
+  const height = 6 + LINE + 3 + title.length * LINE + body.length * LINE + 6;
+  useLayoutEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const context = context2d(canvas);
+    context.clearRect(0, 0, inner, height);
+    drawFrame(context, 0, 0, inner, height);
+    drawText(context, heading, 8, 6, C.acc2, true);
+    if (editorial) {
+      const tag = "Editorial";
+      const tw = measureText(tag) + 6;
+      context.fillStyle = C.ink2;
+      context.fillRect(inner - 8 - tw, 4, tw, 11);
+      drawText(context, tag, inner - 5 - tw, 6, C.paper);
+    }
+    let y = 6 + LINE + 3;
+    for (const line of title) {
+      drawText(context, line, 8, y, C.ink, true);
+      y += LINE;
+    }
+    for (const line of body) {
+      drawText(context, line, 8, y, C.ink2);
+      y += LINE;
+    }
+  }, [body, editorial, heading, height, inner, title]);
+  return (
+    <div className="overland-moment" data-moment-id={annotation.id} data-testid="overland-moment" style={{ top, left }}>
+      <canvas aria-hidden="true" className="overland-pixels" height={height} ref={ref} style={{ width: inner * scale, height: height * scale }} width={inner} />
+      <div className="overland-moment-side">
+        {annotation.media ? (
+          <button aria-label={`Open photo: ${photoLabel(annotation)}`} className="overland-moment-photo" onClick={onOpenPhoto} type="button">
+            <img alt="" height={annotation.media.height} src={annotation.media.thumbUrl} width={annotation.media.width} />
+          </button>
+        ) : null}
+        <Key className="overland-moment-close" label="Put this moment away" onClick={onClose}>
+          <PixelLabel scale={2} text="OK" />
+        </Key>
+      </div>
+    </div>
+  );
+}
+
 export interface OverlandRealmProps {
   route: QuestRoute;
   entry: OverlandEntry;
@@ -132,7 +201,20 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
     },
     [frames, sprite.height, sprite.width],
   );
-  const driver = useGoogleReplayDriver({ route, camera: "sustained", palette: "immersive", positionMarker });
+  // Her moments along the route. The ref mirrors the reducer; sendMoment is its one writer.
+  const anchors = useMemo(() => route.annotations.map((annotation) => ({ id: annotation.id, atDistanceM: annotation.atDistanceM, hasMedia: Boolean(annotation.media) })), [route.annotations]);
+  const momentsRef = useRef(initialOverlandMomentsState(anchors));
+  const [moments, setMoments] = useState(momentsRef.current);
+  const sendMoment = useCallback((event: OverlandMomentsEvent) => {
+    const next = reduceOverlandMoments(momentsRef.current, event);
+    if (next === momentsRef.current) return;
+    momentsRef.current = next;
+    setMoments(next);
+  }, []);
+  const realmRef = useRef(phase === "realm");
+  realmRef.current = phase === "realm";
+  const timeScale = useCallback(() => (realmRef.current ? momentTimeScale(momentsRef.current) : 1), []);
+  const driver = useGoogleReplayDriver({ route, camera: "sustained", palette: "immersive", positionMarker, timeScale });
   const { session, sessionRef, commitControl, totalDistanceM } = driver;
   const { status, statusReason } = session;
   const realm = phase === "realm";
@@ -169,9 +251,21 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
   }, [frames, reducedMotion, sessionRef, status.state, totalDistanceM]);
 
   const seek = useCallback(
-    (progressM: number) => commitControl({ type: "progressSelected", progressM: Math.min(totalDistanceM, Math.max(0, progressM)), totalDistanceM }),
-    [commitControl, totalDistanceM],
+    (progressM: number) => {
+      const to = Math.min(totalDistanceM, Math.max(0, progressM));
+      sendMoment({ type: "seeked", progressM: to });
+      commitControl({ type: "progressSelected", progressM: to, totalDistanceM });
+    },
+    [commitControl, sendMoment, totalDistanceM],
   );
+
+  // Progress from the replay's throttled snapshots meets the moments.
+  useEffect(() => {
+    if (!realm) return;
+    sendMoment({ type: "progressed", progressM: session.control.progressM, playing: session.control.playing, nowMs: performance.now() });
+  }, [realm, sendMoment, session.control.playing, session.control.progressM]);
+  const momentId = moments.phase === "showing" || moments.phase === "mediaOpen" ? moments.id : null;
+  const moment = momentId ? route.annotations.find((annotation) => annotation.id === momentId) : undefined;
   const toggle = useCallback(() => commitControl({ type: "playbackToggled" }), [commitControl]);
 
   useEffect(() => {
@@ -267,6 +361,7 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
             </Key>
             <input
               aria-label="Route progress"
+              data-moment-phase={moments.phase}
               aria-valuetext={content.progress}
               className="overland-scrub"
               max={100}
@@ -278,6 +373,23 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
               value={Math.round(percent * 10) / 10}
             />
           </div>
+          {moment ? (
+            <MomentBox
+              annotation={moment}
+              key={moment.id}
+              left={layout.textBox.left}
+              onClose={() => sendMoment({ type: "dismissRequested", id: moment.id, nowMs: performance.now() })}
+              onOpenPhoto={() => sendMoment({ type: "mediaOpened", id: moment.id })}
+              top={layout.textBox.top + boxHeight * textScale + 10}
+              width={layout.textBox.width}
+            />
+          ) : null}
+          <p aria-live="polite" className="sr-only" data-testid="overland-moment-text">
+            {moment ? `${KIND_LABEL[moment.kind]} at ${distanceLabel(moment.atDistanceM)}${moment.evidence === "hypothesis" ? ", editorial" : ""}. ${moment.title ? `${moment.title}. ` : ""}${moment.body}` : ""}
+          </p>
+          {moment && moments.phase === "mediaOpen" && moment.media ? (
+            <PhotoViewer annotation={moment} onClose={() => sendMoment({ type: "mediaClosed", id: moment.id, nowMs: performance.now() })} />
+          ) : null}
         </>
       ) : null}
     </>

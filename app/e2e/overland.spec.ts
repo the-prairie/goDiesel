@@ -72,6 +72,8 @@ test("Back from an entry returns to the same town and view", async ({ page }) =>
 });
 
 test("the world, index and entry work from the keyboard alone", async ({ page }) => {
+  // Entering a town builds it in the software renderer, which takes a while in CI.
+  test.setTimeout(90_000);
   await openWorld(page);
   await page.getByTestId("overland-world").focus();
   await page.keyboard.press("ArrowRight");
@@ -80,6 +82,7 @@ test("the world, index and entry work from the keyboard alone", async ({ page })
   // Enter on a town enters it in 3D; Escape comes back to the world.
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#\/lab\/overland\/town\//);
+  await expect(page.getByTestId("overland-town")).toHaveAttribute("data-town-phase", "ready", { timeout: 60_000 });
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("overland-world")).toBeVisible();
   await page.getByRole("button", { name: "Index", exact: true }).click();

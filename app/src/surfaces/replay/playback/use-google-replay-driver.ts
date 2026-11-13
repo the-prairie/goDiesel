@@ -55,6 +55,11 @@ export interface GoogleReplayDriverOptions {
   palette: "immersive" | "neutral";
   /** Dresses the position marker in place of the default dot or photo. */
   positionMarker?: (marker: HTMLElement) => () => void;
+  /**
+   * How fast playback runs this frame, as a share of its speed: 1 by
+   * default, below 1 to slow it, 0 to hold it without pausing.
+   */
+  timeScale?: () => number;
 }
 
 /**
@@ -63,7 +68,9 @@ export interface GoogleReplayDriverOptions {
  * playback while the scene is ready. The reducer state lives in a ref that
  * `dispatchStage` alone writes; React receives throttled snapshots.
  */
-export function useGoogleReplayDriver({ route, camera, palette, positionMarker }: GoogleReplayDriverOptions) {
+export function useGoogleReplayDriver({ route, camera, palette, positionMarker, timeScale }: GoogleReplayDriverOptions) {
+  const timeScaleRef = useRef(timeScale);
+  timeScaleRef.current = timeScale;
   const stageRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
@@ -227,7 +234,7 @@ export function useGoogleReplayDriver({ route, camera, palette, positionMarker }
     let lastUiUpdate = previous;
     const tick = (now: number) => {
       const current = sessionRef.current.control;
-      const elapsedSeconds = (now - previous) / 1_000;
+      const elapsedSeconds = ((now - previous) / 1_000) * Math.max(0, timeScaleRef.current?.() ?? 1);
       const next = dispatchStage({
         type: "controlRequested",
         event: { type: "frameElapsed", elapsedSeconds, totalDistanceM },
