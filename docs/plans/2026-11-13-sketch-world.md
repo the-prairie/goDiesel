@@ -232,3 +232,113 @@ The Service Specific Terms page (https://cloud.google.com/maps-platform/terms/ma
   read as either, and a heavily restyled scene could be read as modifying
   the content.
 - Ask Google directly before shipping.
+
+## Round 2: the OpenStreetMap sketch toward her reference
+
+**Owner decision.** Do both. The real-geometry sketch is the heart of a city
+where Google has 3D coverage. The OpenStreetMap sketch is the far-out view
+and the fallback everywhere else. Defaults are the clean line look and the
+corridor reveal; the review switch stays for now.
+
+**S12. Two phone defects, fixed test-first.**
+- *No edge lines at street level on a phone.* The edge layer took the tiles
+  round the middle of the view. A low, tilted camera looks far beyond its
+  nearest buildings, so the six tiles a phone gets were the wrong six. It now
+  takes tiles along the line from the ground at the foot of the screen to
+  the middle of the view, nearest first (`sketch-tiles.ts`, unit tested).
+- *The far view was blank for seconds on first load, with no word.* The map
+  is now ready only once its first view is drawn, tiles and all. Until then
+  it says "Drawing the world…", with a pen line moving under it (static with
+  reduced motion). Covered by an e2e test with slow stubbed tiles.
+- Locally the first view takes about 1.2 s. The ten seconds seen came from a
+  colder or slower path (a phone on the network, a cold dev server) that I
+  did not reproduce exactly.
+
+**S13. Buildings drawn by rule: INVENTED DETAIL, NOT THE REAL BUILDING.**
+Near the camera the edge layer draws each building itself (`sketch-massing.ts`):
+- **Height.** A height the data really gives (above 7.5 m) is kept. Otherwise
+  height comes from footprint size: about two storeys for a house, a few for a
+  block, more only for the largest footprints. It is drawn towards the
+  heights of tall neighbours within about 100 m, never lower than the data,
+  and the same every time.
+- **Roof.** Low, near-rectangular Japanese buildings get tiled roofs: gabled
+  when long, hipped when squarish. Towers above 12 m get a flat roof behind a
+  1 m parapet. Odd shapes and other regions get a flat roof. A building cut
+  by a tile's edge keeps the data's height and a flat roof, so both halves
+  agree.
+- **Facades.** Walls carry their distance along and their height, so a shader
+  draws:
+  - floor lines;
+  - windows in bays;
+  - on a tower, shopfronts at street level;
+  - on a house, a slatted lattice and a door on the ground floor;
+  - rows of tiles on pitched roofs.
+
+  Each pattern fades out before it gets too fine to draw.
+- MapLibre's own white boxes stay for the far city. Our buildings are never
+  lower, so the boxes hide inside them.
+
+**S14. Street furniture from the data, where the data has it.**
+- Trees stand in the data's parks and woods. Where each tree stands is
+  invented, on a jittered 10 m grid, at most 1,500 per tile.
+- Bridges get railings either side of the deck.
+- Railways keep their sleepers.
+- OpenFreeMap's OpenMapTiles build carries no street lamps, crossings,
+  benches or street trees, so none are drawn. They would need our own
+  OpenStreetMap extract.
+
+**S15. The route at street level.** From zoom 14.6 the flat route line
+fades out. The edge layer draws her route on the ground at full resolution
+(568 points for 064 instead of 96), 0.6 m up, 3.2 px of the one red, hidden
+by buildings in front (`sketch-route-ground.ts`).
+
+**S16. Inside the 3D world.** `OverlandJump` and its realm take a skin. The
+sketch skin draws:
+- her marker as an ink figure from behind, with the red accent, in four
+  frames of a stride;
+- the story box, moment box, keys and status boxes as ink line on paper.
+
+Same elements and behaviour as Overland's pixel versions, which stay
+unchanged for Overland.
+
+**S17. The join: one continuous world.** Decided and recorded. Not built
+this round.
+
+1. *World and region (zoom below about 14.5).* Always the OpenStreetMap
+   sketch: coastlines, relief, cities, her routes.
+2. *Into a city (zoom 14.5 and closer).* Hand over to the real-geometry
+   sketch only when all of these hold:
+   - Google has Photorealistic 3D coverage there (a coverage list per city of
+     hers, kept with the route data, so nothing is fetched to find out);
+   - the policy question in the spike section is answered yes, in writing;
+   - the device can afford it: WebGL2, `navigator.deviceMemory` of at least
+     4 where known, and no Save-Data;
+   - Google's tiles for the first view arrive within about 8 s.
+
+   While Google's tiles load, the OpenStreetMap sketch stays on screen. Once
+   they are drawn, the Cesium canvas fades in over it with a matched camera
+   (MapLibre's centre, zoom, pitch and bearing turned into a Cesium camera
+   position). Both are ink on paper with the same corridor colour, so the
+   change reads as more detail arriving, not as a switch.
+3. *Back out.* Below zoom 14 the real-geometry sketch fades out and is torn
+   down to free its 250–500 MB, and the OpenStreetMap sketch carries on.
+4. *Fallback.* With no coverage, a policy no, tiles failing, too little
+   memory, or reduced data, the drawn OpenStreetMap city (S13) stays. That is
+   the experience everywhere else anyway.
+5. *The jump.* From the real-geometry sketch, "jumping in" becomes a colour
+   flood on the same geometry (reveal 0 → 1) with the existing replay
+   behind it. From the OpenStreetMap sketch it stays the current dive and
+   hand-over.
+
+   *Cost, from the spike:* a first view of 30–70 MB and 5–10 s.
+
+**Round 2 results.**
+- **Street view at zoom 17.4, 66° tilt, panning and turning (Chrome on this
+  Mac's GPU):**
+  - 1440: 16.7 ms median, 16.8 ms p95; 2.9 M triangles and 3.4 M edges in 12 tiles.
+  - 375: 16.7 ms median, 16.7 ms p95; 2.0 M triangles in 8 tiles.
+  - 375 with the CPU throttled 4×: 16.7 ms median, worst frame 33 ms.
+- **GPU memory on a phone.** Faces are packed to 20 bytes a vertex. The
+  phone's six tiles come to about 1.5 M triangles: roughly 90 MB of faces and
+  40 MB of edges. That is the phone risk.
+- **Bundle.** The sketch's chunks come to 54.3 KiB; budget raised to 60 KiB.

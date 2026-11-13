@@ -13,7 +13,7 @@ import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap 
 
 import type { EdgeRequest, EdgeResponse } from "@/labs/sketch/sketch-edge-worker";
 import { BUILDING_COLOURS } from "@/labs/sketch/sketch-faces";
-import { MASS_STRIDE } from "@/labs/sketch/sketch-massing";
+import { PACKED_BYTES } from "@/labs/sketch/sketch-massing";
 import type { ExploredId } from "@/labs/sketch/sketch-tile";
 import { routeOnGround } from "@/labs/sketch/sketch-route-ground";
 import { tilesToDraw } from "@/labs/sketch/sketch-tiles";
@@ -164,7 +164,8 @@ float fadeAt(float size) {
 
 void main() {
   vec3 base = u_paper;
-  if (v_colour >= 0) base = mix(u_paper, u_palette[v_colour], v_strength);
+  // Colour 255 (or anything past the palette) is a building not explored.
+  if (v_colour < 8) base = mix(u_paper, u_palette[v_colour], v_strength);
   float ink = 0.0;
   float glass = 0.0;
   vec2 uv = v_uv;
@@ -286,7 +287,7 @@ export function createEdgeLayer({
   const tiles = new Map<string, TileDrawing>();
   // Tiles made by the worker, waiting to be uploaded inside `render`, where
   // MapLibre expects GL state to change and restores its own afterwards.
-  const arrived: { key: string; edges: Float32Array; faces: Float32Array; extent: number; version: number }[] = [];
+  const arrived: { key: string; edges: Float32Array; faces: ArrayBuffer; extent: number; version: number }[] = [];
   const pending = new Map<string, number>();
   const failed = new Set<string>();
   const uniforms: Record<string, WebGLUniformLocation | null> = {};
@@ -386,20 +387,19 @@ export function createEdgeLayer({
       g.bindVertexArray(faceVao);
       g.bindBuffer(g.ARRAY_BUFFER, faceBuffer);
       g.bufferData(g.ARRAY_BUFFER, item.faces, g.STATIC_DRAW);
-      const stride = MASS_STRIDE * 4;
-      for (const [name, size, offset] of [
-        ["a_pos", 3, 0],
-        ["a_uv", 2, 3],
-        ["a_shade", 1, 5],
-        ["a_kind", 1, 6],
-        ["a_strength", 1, 7],
-        ["a_colour", 1, 8],
-      ] as const) {
-        const location = g.getAttribLocation(faceProgram, name);
-        if (location < 0) continue;
+      // Packed per vertex (see packFaces): floats, half floats, bytes.
+      const attribute = (name: string, size: number, type: number, normalised: boolean, offset: number) => {
+        const location = g.getAttribLocation(faceProgram!, name);
+        if (location < 0) return;
         g.enableVertexAttribArray(location);
-        g.vertexAttribPointer(location, size, g.FLOAT, false, stride, offset * 4);
-      }
+        g.vertexAttribPointer(location, size, type, normalised, PACKED_BYTES, offset);
+      };
+      attribute("a_pos", 3, g.FLOAT, false, 0);
+      attribute("a_uv", 2, g.HALF_FLOAT, false, 12);
+      attribute("a_shade", 1, g.UNSIGNED_BYTE, true, 16);
+      attribute("a_kind", 1, g.UNSIGNED_BYTE, false, 17);
+      attribute("a_strength", 1, g.UNSIGNED_BYTE, true, 18);
+      attribute("a_colour", 1, g.UNSIGNED_BYTE, false, 19);
       g.bindVertexArray(null);
       tiles.set(item.key, {
         version: item.version,
@@ -407,7 +407,7 @@ export function createEdgeLayer({
         edgeCount: item.edges.length / 6,
         edgeVao,
         edgeBuffer,
-        faceCount: item.faces.length / MASS_STRIDE,
+        faceCount: item.faces.byteLength / PACKED_BYTES,
         faceVao,
         faceBuffer,
         usedAt: performance.now(),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FACE, MASS_STRIDE, buildingMass, inferHeight, orientedBox, roofFor } from "@/labs/sketch/sketch-massing";
+import { FACE, MASS_STRIDE, PACKED_BYTES, buildingMass, halfToFloat, inferHeight, orientedBox, packFaces, roofFor } from "@/labs/sketch/sketch-massing";
 
 // Footprints in metres for these tests: one tile unit is one metre.
 const rect = (w: number, d: number, x = 0, y = 0): [number, number][] => [
@@ -131,5 +131,30 @@ describe("buildingMass", () => {
     expect(mass.roof).toBe("flat");
     const corners = segments(mass.edges).filter((s) => s[0] === s[3] && s[1] === s[4]);
     expect(corners).toHaveLength(6);
+  });
+});
+
+describe("packFaces", () => {
+  it("packs each vertex into 20 bytes, keeping position exact and the rest close", () => {
+    const mass = buildingMass({ rings: [rect(16, 6)], height: 7, minHeight: 0 }, { metresPerUnit: 1, region: "japan", seed: 7, neighbours: [], explored: { strength: 0.5, colour: 3 } });
+    const packed = packFaces(mass.faces);
+    const vertices = mass.faces.length / MASS_STRIDE;
+    expect(packed.byteLength).toBe(vertices * PACKED_BYTES);
+    const view = new DataView(packed);
+    for (let v = 0; v < vertices; v += 1) {
+      const o = v * PACKED_BYTES;
+      const f = v * MASS_STRIDE;
+      expect(view.getFloat32(o, true)).toBeCloseTo(mass.faces[f], 5);
+      expect(view.getFloat32(o + 8, true)).toBeCloseTo(mass.faces[f + 2], 5);
+      expect(halfToFloat(view.getUint16(o + 12, true))).toBeCloseTo(mass.faces[f + 3], 1);
+      expect(view.getUint8(o + 17)).toBe(mass.faces[f + 6]);
+      expect(view.getUint8(o + 18) / 255).toBeCloseTo(0.5, 2);
+      expect(view.getUint8(o + 19)).toBe(3);
+    }
+  });
+
+  it("marks a building that is not explored with no colour", () => {
+    const mass = buildingMass({ rings: [rect(16, 6)], height: 7, minHeight: 0 }, { metresPerUnit: 1, region: "japan", seed: 7, neighbours: [] });
+    expect(new DataView(packFaces(mass.faces)).getUint8(19)).toBe(255);
   });
 });

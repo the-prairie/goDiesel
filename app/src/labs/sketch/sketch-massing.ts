@@ -286,3 +286,58 @@ export function buildingMass(footprint: { rings: P[][]; height: number; minHeigh
   } else flatTop(outer, top);
   return { faces: new Float32Array(faces), edges: new Float32Array(edges), roof, eave, height };
 }
+
+/**
+ * Bytes per vertex once packed for the GPU: position as three floats, the
+ * facade coordinates as two half floats, then shade, kind, strength and
+ * colour as one byte each (colour 255 for none). A dense city tile's
+ * buildings run to hundreds of thousands of triangles; this keeps them to
+ * well under half the size of plain floats.
+ */
+export const PACKED_BYTES = 20;
+
+const f32 = new Float32Array(1);
+const u32 = new Uint32Array(f32.buffer);
+
+/** A number as an IEEE half float, rounded. */
+export function floatToHalf(value: number) {
+  f32[0] = value;
+  const x = u32[0];
+  const sign = (x >>> 16) & 0x8000;
+  const exponent = ((x >>> 23) & 0xff) - 127 + 15;
+  let mantissa = x & 0x7fffff;
+  if (exponent <= 0) return sign;
+  if (exponent >= 31) return sign | 0x7c00;
+  mantissa += 0x1000;
+  if (mantissa & 0x800000) return sign | ((exponent + 1) << 10);
+  return sign | (exponent << 10) | (mantissa >>> 13);
+}
+
+export function halfToFloat(half: number) {
+  const sign = half & 0x8000 ? -1 : 1;
+  const exponent = (half >>> 10) & 0x1f;
+  const mantissa = half & 0x3ff;
+  if (exponent === 0) return sign * 2 ** -14 * (mantissa / 1024);
+  if (exponent === 31) return mantissa ? NaN : sign * Infinity;
+  return sign * 2 ** (exponent - 15) * (1 + mantissa / 1024);
+}
+
+export function packFaces(faces: Float32Array): ArrayBuffer {
+  const vertices = faces.length / MASS_STRIDE;
+  const buffer = new ArrayBuffer(vertices * PACKED_BYTES);
+  const view = new DataView(buffer);
+  for (let v = 0; v < vertices; v += 1) {
+    const o = v * PACKED_BYTES;
+    const f = v * MASS_STRIDE;
+    view.setFloat32(o, faces[f], true);
+    view.setFloat32(o + 4, faces[f + 1], true);
+    view.setFloat32(o + 8, faces[f + 2], true);
+    view.setUint16(o + 12, floatToHalf(faces[f + 3]), true);
+    view.setUint16(o + 14, floatToHalf(faces[f + 4]), true);
+    view.setUint8(o + 16, Math.round(Math.min(1, Math.max(0, faces[f + 5])) * 255));
+    view.setUint8(o + 17, faces[f + 6]);
+    view.setUint8(o + 18, Math.round(Math.min(1, Math.max(0, faces[f + 7])) * 255));
+    view.setUint8(o + 19, faces[f + 8] < 0 ? 255 : faces[f + 8]);
+  }
+  return buffer;
+}

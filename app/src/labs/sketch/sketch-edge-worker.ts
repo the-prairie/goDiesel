@@ -7,7 +7,7 @@
 // frames.
 
 import { BUILDING_COLOURS, nearBuildings } from "@/labs/sketch/sketch-faces";
-import { buildingMass, type Region } from "@/labs/sketch/sketch-massing";
+import { buildingMass, packFaces, type Region } from "@/labs/sketch/sketch-massing";
 import { treesIn } from "@/labs/sketch/sketch-trees";
 import { REVEAL_LAYERS, dropTileEdges, exploredIds, readBuildings, readParks, type ExploredId } from "@/labs/sketch/sketch-tile";
 
@@ -19,7 +19,7 @@ export interface EdgeRequest {
 }
 
 export type EdgeResponse =
-  | { key: string; edges: Float32Array; faces: Float32Array; extent: number; explored: ExploredId[]; version: number; buildings: number }
+  | { key: string; edges: Float32Array; faces: ArrayBuffer; extent: number; explored: ExploredId[]; version: number; buildings: number }
   | { key: string; error: string };
 
 const scope = self as unknown as { onmessage: ((event: MessageEvent<EdgeRequest>) => void) | null; postMessage: (message: EdgeResponse, transfer?: Transferable[]) => void };
@@ -105,8 +105,8 @@ scope.onmessage = async (event) => {
     // Trees where the data has parks and woods: their places are invented, the parks are not.
     edges.push(treesIn(readParks(data), { metresPerUnit, seed: x * 92821 + y * 68917 }));
     const allEdges = dropTileEdges(join(edges), extent);
-    const allFaces = join(faces);
-    scope.postMessage({ key, edges: allEdges, faces: allFaces, extent, explored, version: reveal?.version ?? 0, buildings: buildings.length }, [allEdges.buffer, allFaces.buffer]);
+    const allFaces = packFaces(join(faces));
+    scope.postMessage({ key, edges: allEdges, faces: allFaces, extent, explored, version: reveal?.version ?? 0, buildings: buildings.length }, [allEdges.buffer, allFaces]);
   } catch (error) {
     scope.postMessage({ key, error: error instanceof Error ? error.message : String(error) });
   }

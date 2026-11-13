@@ -79,11 +79,13 @@ if (entry.includes("overland-world-mask")) {
 
 // The sketch world (lab): its page and its edge worker, lazy, on top of the
 // MapLibre chunk the app already loads on demand. Measured at 39.5 KiB when
-// added (page 32.1 KiB, worker 7.4 KiB); the cap leaves a little room.
+// added; 54.3 KiB once it drew its buildings by rule (page 38.3 KiB, worker
+// 14.2 KiB, the sketch-real spike's page 1.8 KiB, which shares Cesium's
+// chunk). The cap leaves a little room.
 const sketchChunks = assets.filter((name) => /^sketch-.*\.js$/.test(name));
 let sketchBytes = 0;
 for (const name of sketchChunks) sketchBytes += (await stat(path.join(dist, "assets", name))).size;
-const sketchBudgetBytes = 48 * 1024;
+const sketchBudgetBytes = 60 * 1024;
 if (sketchChunks.length === 0) throw new Error("The sketch world's chunks are missing from the build.");
 if (sketchBytes > sketchBudgetBytes) {
   throw new Error(`The sketch world is ${(sketchBytes / 1024).toFixed(1)} KiB; budget is ${sketchBudgetBytes / 1024} KiB.`);
