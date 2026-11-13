@@ -46,10 +46,20 @@ describe("judgeFrames", () => {
     expect(judgeFrames(frames(80, FRAME_WINDOW - 1), "high")).toEqual({ tier: "high", judged: false });
   });
 
-  it("steps down one tier when the median frame is over budget, and never below low", () => {
-    expect(judgeFrames(frames(FRAME_BUDGET_MS + 6), "high")).toEqual({ tier: "medium", judged: true });
-    expect(judgeFrames(frames(FRAME_BUDGET_MS + 6), "medium")).toEqual({ tier: "low", judged: true });
-    expect(judgeFrames(frames(FRAME_BUDGET_MS + 6), "low")).toEqual({ tier: "low", judged: true });
+  it("steps down one tier when frames are slow, and never below low", () => {
+    expect(judgeFrames(frames(45), "high")).toEqual({ tier: "medium", judged: true });
+    expect(judgeFrames(frames(45), "medium")).toEqual({ tier: "low", judged: true });
+    expect(judgeFrames(frames(45), "low")).toEqual({ tier: "low", judged: true });
+  });
+
+  it("keeps a steady frame rate the display caps at 30 Hz, as headless browsers and low-power phones do", () => {
+    expect(judgeFrames(frames(33.3), "high")).toEqual({ tier: "high", judged: true });
+  });
+
+  it("steps down when frames stutter between the refresh and twice it", () => {
+    const stutter = Array.from({ length: FRAME_WINDOW }, (_, index) => (index % 2 ? 16.7 : 33.4));
+    expect(FRAME_BUDGET_MS).toBeLessThan(33.4);
+    expect(judgeFrames(stutter, "high")).toEqual({ tier: "medium", judged: true });
   });
 
   it("keeps the tier when frames are on time, and is not moved by a few long ones", () => {

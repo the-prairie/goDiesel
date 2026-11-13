@@ -54,12 +54,23 @@ export function treesKept(total: number, features: number, share: number) {
   return Math.min(total, features + Math.round((total - features) * share));
 }
 
-/** One judgement over a full window of frame times, in milliseconds. */
+/** Below this many frames a second the town is slow however steady it is. */
+export const SLOW_FRAME_MS = 40;
+
+/**
+ * One judgement over a full window of frame times, in milliseconds. A
+ * median over budget steps down when the frames stutter (the median is well
+ * above the fastest tenth, so frames are being dropped) or are plainly slow.
+ * A steady rate the display itself caps, such as 30 Hz in a headless browser
+ * or a phone in low-power mode, is not stutter and keeps the tier.
+ */
 export function judgeFrames(frameMs: readonly number[], tier: QualityTier): { tier: QualityTier; judged: boolean } {
   if (frameMs.length < FRAME_WINDOW) return { tier, judged: false };
   const sorted = [...frameMs].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
-  if (median <= FRAME_BUDGET_MS) return { tier, judged: true };
+  const fastest = sorted[Math.floor(sorted.length / 10)];
+  const struggling = median > SLOW_FRAME_MS || median > fastest * 1.4;
+  if (median <= FRAME_BUDGET_MS || !struggling) return { tier, judged: true };
   return { tier: TIERS[Math.min(TIERS.length - 1, TIERS.indexOf(tier) + 1)], judged: true };
 }
 
