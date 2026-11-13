@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { TOWN_FOV_DEG, cameraPosition, diveTarget, homePose, mixPose, realmSpriteScale, trailOnGround } from "@/labs/overland/model/town-camera";
+import { TOWN_FOV_DEG, cameraPosition, diveTarget, homePose, mixPose, realmSpriteScale, runnerFacing, trailOnGround } from "@/labs/overland/model/town-camera";
 
 describe("homePose", () => {
   it("frames the town wider on a landscape screen and from higher on a phone", () => {
@@ -85,5 +85,25 @@ describe("trailOnGround", () => {
 
   it("is empty without points", () => {
     expect(trailOnGround([], { x: 0, z: 0 }, 1, 10)).toEqual([]);
+  });
+});
+
+describe("runnerFacing", () => {
+  // Yaw 0: the camera stands at +z looking towards -z, with +x on its right.
+  it("shows her back when she runs away from the camera, and her face when she runs towards it", () => {
+    expect(runnerFacing({ dx: 0, dz: -1 }, 0)).toBe("up");
+    expect(runnerFacing({ dx: 0, dz: 1 }, 0)).toBe("down");
+  });
+
+  it("shows her side when she runs across the view", () => {
+    expect(runnerFacing({ dx: 1, dz: 0 }, 0)).toBe("right");
+    expect(runnerFacing({ dx: -1, dz: 0 }, 0)).toBe("left");
+  });
+
+  it("follows the camera round: behind her on the run out of town, she shows her back", () => {
+    // The dive's end looks west (yaw pi/2) behind a runner heading west, and east likewise.
+    expect(runnerFacing({ dx: -1, dz: 0 }, Math.PI / 2)).toBe("up");
+    expect(runnerFacing({ dx: 1, dz: 0 }, -Math.PI / 2)).toBe("up");
+    expect(runnerFacing({ dx: 0, dz: -1 }, Math.PI / 2)).toBe("right");
   });
 });

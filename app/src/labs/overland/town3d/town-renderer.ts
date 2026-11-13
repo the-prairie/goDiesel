@@ -19,7 +19,7 @@ import {
 import type { QuestRoute } from "@/domain/route";
 import { RUNNER_ROWS, type RunnerFacing } from "@/labs/overland/engine/runner";
 import { PLACE_DEFAULT_LIGHT, type TownLight } from "@/labs/overland/model/run-light";
-import { TOWN_FOV_DEG, cameraPosition, diveTarget, homePose, mixPose, trailOnGround, type TownPose } from "@/labs/overland/model/town-camera";
+import { TOWN_FOV_DEG, cameraPosition, diveTarget, homePose, mixPose, runnerFacing, trailOnGround, type TownPose } from "@/labs/overland/model/town-camera";
 import type { TownPlan } from "@/labs/overland/model/town-plan";
 import { FRAME_WINDOW, judgeFrames, qualitySettings, treesKept, type QualityTier } from "@/labs/overland/model/town-quality";
 import { paintTrail } from "@/labs/overland/town3d/painters";
@@ -429,14 +429,13 @@ export function createTownRenderer(options: TownRendererOptions): TownRenderer {
   let runFrame = 0;
   let runAcc = 0;
   let waterAcc = 0;
+  /** Places the runner; (dx, dz) is the way she is actually running. */
   const poseRunner = (x: number, z: number, dx: number, dz: number, yaw: number, frame: number) => {
     built.runner.position.set(x, 0.02, z);
     built.runner.rotation.set(0, 0, 0);
     built.runner.rotation.y = yaw;
     built.runner.rotateX(-0.28);
-    const fx = -(dx * Math.cos(yaw) - dz * Math.sin(yaw));
-    const fz = -(dx * Math.sin(yaw) + dz * Math.cos(yaw));
-    const facing: RunnerFacing = Math.abs(fx) > Math.abs(fz) ? (fx > 0 ? "right" : "left") : fz > 0 ? "down" : "up";
+    const facing: RunnerFacing = runnerFacing({ dx, dz }, yaw);
     const row = reducedMotion && mode === "home" ? 0 : RUNNER_ROWS[facing];
     built.runnerTexture.offset.set((reducedMotion ? 0 : frame) * 0.25, 1 - 0.25 * (row + 1));
   };
@@ -517,7 +516,8 @@ export function createTownRenderer(options: TownRendererOptions): TownRenderer {
     if (mode === "home" || mode === "surfacing") {
       if (!reducedMotion) runS -= dt * RUN_SPEED;
       const p = along(runS);
-      poseRunner(p.x, p.z, p.dx, p.dz, shown.yaw, runFrame);
+      // She runs the loop backwards along its points, so her way is against them.
+      poseRunner(p.x, p.z, -p.dx, -p.dz, shown.yaw, runFrame);
     } else {
       const sign = plan.signposts.find((candidate) => candidate.slug === diveSlug);
       if (sign) {

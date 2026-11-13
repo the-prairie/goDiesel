@@ -105,3 +105,18 @@ export function trailOnGround(points: ReadonlyArray<{ lat: number; lng: number }
     return [start.x + side * forward, start.z + side * across] as [number, number];
   });
 }
+
+export type Facing = "down" | "up" | "right" | "left";
+
+/**
+ * Which of the runner's sprites the camera sees: her back when she runs
+ * away from it, her face when she runs towards it, else her side. `travel`
+ * is her direction on the ground; the camera looks along (-sin yaw, -cos yaw)
+ * with (cos yaw, -sin yaw) on its right.
+ */
+export function runnerFacing(travel: { dx: number; dz: number }, yaw: number): Facing {
+  const away = -travel.dx * Math.sin(yaw) - travel.dz * Math.cos(yaw);
+  const right = travel.dx * Math.cos(yaw) - travel.dz * Math.sin(yaw);
+  if (Math.abs(right) > Math.abs(away)) return right > 0 ? "right" : "left";
+  return away > 0 ? "up" : "down";
+}
