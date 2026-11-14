@@ -85,10 +85,13 @@ if (entry.includes("overland-world-mask")) {
 // worker 14.2, the real view 6.9, the spike page 3.7, shared reveal 1.3).
 // Cesium itself stays in its own lazy chunk, shared with Atlas, loaded only
 // when the hand-over starts. The cap leaves a little room.
+// 2026-11-14: raised from 76 to 86 KiB for the regional building rules
+// (round 10: regions, forms, land-use types, landmarks, regional facades and
+// the grey and colour split), measured at 85.8 KiB (page 52.4, worker 20.4).
 const sketchChunks = assets.filter((name) => /^sketch-.*\.js$/.test(name));
 let sketchBytes = 0;
 for (const name of sketchChunks) sketchBytes += (await stat(path.join(dist, "assets", name))).size;
-const sketchBudgetBytes = 76 * 1024;
+const sketchBudgetBytes = 86 * 1024;
 if (sketchChunks.length === 0) throw new Error("The sketch world's chunks are missing from the build.");
 if (sketchBytes > sketchBudgetBytes) {
   throw new Error(`The sketch world is ${(sketchBytes / 1024).toFixed(1)} KiB; budget is ${sketchBudgetBytes / 1024} KiB.`);

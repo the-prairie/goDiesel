@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dropTileEdges, exploredIds, readBuildings, readParks } from "@/labs/sketch/sketch-tile";
+import { dropTileEdges, exploredIds, readBuildings, readContext, readParks } from "@/labs/sketch/sketch-tile";
 
 // A minimal protobuf writer, to build vector tiles for the tests.
 const varint = (value: number) => {
@@ -182,5 +182,42 @@ describe("readParks", () => {
     const parks = readParks(data);
     expect(parks).toHaveLength(2);
     expect(parks[1][0][0]).toEqual([200, 200]);
+  });
+});
+
+/** A layer of features with string properties: polygons (rings) or points. */
+function layerOf(name: string, features: { props: Record<string, string>; rings?: [number, number][][]; point?: [number, number] }[]) {
+  const keys: string[] = [];
+  const values: string[] = [];
+  const index = <T,>(list: T[], value: T) => (list.includes(value) ? list.indexOf(value) : list.push(value) - 1);
+  const featureBytes = features.map((feature, id) => {
+    const tags = Object.entries(feature.props).flatMap(([k, v]) => [index(keys, k), index(values, v)]);
+    const geometry = feature.point ? [(1 & 7) | (1 << 3), zig(feature.point[0]), zig(feature.point[1])] : rings(feature.rings!);
+    return bytes(2, [...uint(1, id + 1), ...packed(2, tags), ...uint(3, feature.point ? 1 : 3), ...packed(4, geometry)]);
+  });
+  return bytes(3, [...uint(15, 2), ...text(1, name), ...featureBytes.flat(), ...keys.flatMap((k) => text(3, k)), ...values.flatMap((v) => bytes(4, text(1, v))), ...uint(5, 4096)]);
+}
+
+describe("readContext", () => {
+  const data = new Uint8Array([
+    ...layerOf("landuse", [{ props: { class: "industrial" }, rings: [box(0, 0, 100)] }, { props: { class: "school" }, rings: [box(200, 0, 100)] }]),
+    ...layerOf("poi", [
+      { props: { class: "place_of_worship", subclass: "shinto" }, point: [50, 60] },
+      { props: { class: "gate", subclass: "gate" }, point: [55, 90] },
+      { props: { class: "restaurant", subclass: "cafe" }, point: [10, 10] },
+    ]),
+    ...layerOf("landcover", [{ props: { class: "grass", subclass: "garden" }, rings: [box(300, 300, 40)] }, { props: { class: "wood", subclass: "forest" }, rings: [box(400, 400, 40)] }]),
+    ...layerOf("park", [{ props: { class: "historic" }, rings: [box(500, 500, 40)] }]),
+  ]);
+
+  it("reads land use, places of worship and gates, gardens and parks in one pass", () => {
+    const context = readContext(data);
+    expect(context.landuse.map((area) => area.cls)).toEqual(["industrial", "school"]);
+    expect(context.landuse[0].ring.slice(0, 4)).toEqual(box(0, 0, 100).slice(0, 4));
+    expect(context.worship).toEqual([{ x: 50, y: 60, subclass: "shinto" }]);
+    expect(context.gates).toEqual([{ x: 55, y: 90 }]);
+    expect(context.gardens).toHaveLength(1);
+    // Parks and woods, as readParks has them.
+    expect(context.parks).toHaveLength(2);
   });
 });

@@ -12,7 +12,7 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 
 import type { EdgeRequest, EdgeResponse } from "@/labs/sketch/sketch-edge-worker";
-import { BUILDING_COLOURS } from "@/labs/sketch/sketch-faces";
+import { REGIONS, regionAt, type RegionId } from "@/labs/sketch/sketch-region";
 import { PACKED_BYTES } from "@/labs/sketch/sketch-massing";
 import type { ExploredId } from "@/labs/sketch/sketch-tile";
 import { routeOnGround } from "@/labs/sketch/sketch-route-ground";
@@ -38,7 +38,30 @@ const ROUTE_RED: [number, number, number] = [0.85, 0.255, 0.17];
 const ROUTE_WIDTH_PX = 3.2;
 
 /** The real colours explored buildings come back in, padded to the shader's eight. */
-const PALETTE = new Float32Array(Array.from({ length: 8 }, (_, i) => BUILDING_COLOURS[i % BUILDING_COLOURS.length]).flat());
+// Each region's colours, used only where she has been (outside it the city is
+// ink and grey wash): eight wall washes, then the roof material.
+const C = (hex: string) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+const REGION_COLOURS: Record<RegionId, string> = {
+  japan: "f2ebd9 dcd9d1 a8907c e6d6b8 d6dee0 f7f5ee ebd1a8 d1d9cc 8c8782",
+  mediterranean: "e6bd80 d18c66 f2e0b8 ebc7b3 f0d699 f5f0e6 d99e7a dbd1bd c2735c",
+  aegean: "faf7f2 f7f5f0 f2f2ee fafaf7 c7dbed edE0c7 e6cc9e ebebe6 c2735c",
+  "northern-europe": "b36b57 996b54 d1b88c f0e8d6 f2f0e6 ccccc7 8c5c4d e0d1b3 6b7078",
+  "north-america": "ccdbe6 ccd9c2 f0e6cc d6d6d1 f5f2ed dbc7a8 b87a66 f0e0b3 73706e",
+  tropical: "f0e0bf e0b880 d1c7ad f2f0e6 d1e0c7 d19973 e6d6b3 bfdbd6 9e6b4d",
+  other: "ede6d9 dbd6cc e6d6bd d1d6db f2f0e8 d6c7b3 c7ccc7 e6dbcc 807d7a",
+};
+const PALETTES = Object.fromEntries(
+  REGIONS.map((region) => {
+    const all = REGION_COLOURS[region].split(" ").map((hex) => C(hex.toLowerCase()));
+    return [region, { walls: new Float32Array(all.slice(0, 8).flat()), roof: all[8] as [number, number, number] }];
+  }),
+) as Record<RegionId, { walls: Float32Array; roof: [number, number, number] }>;
+/** A tile's region, from its middle. */
+const tileRegion = (key: string) => {
+  const [z, x, y] = key.split("/").map(Number);
+  const n = 2 ** z;
+  return regionAt(((x + 0.5) / n) * 360 - 180, (Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 0.5)) / n))) * 180) / Math.PI);
+};
 
 const VERTEX = `#version 300 es
 in vec2 a_corner;
@@ -122,10 +145,15 @@ void main() {
   v_colour = int(a_colour + 0.5);
 }`;
 
-// Facades drawn by rule (INVENTED detail): floor lines, windows in bays,
-// shopfronts on a tower's ground floor, lattice and a door on a house's,
-// rows of tiles on pitched roofs. Each pattern fades out before it is too
-// fine to draw, so it never turns to moire.
+// Facades drawn by rule (INVENTED detail), by face kind (see FACE in
+// sketch-massing) and region (REGIONS): storeys and windows at human scale, a
+// ground floor, balcony bands on a mansion's long faces, curtain walls,
+// ribbon windows, sheds' ribs, temples' posts, roofs' tile lines close up.
+// Outside her explored corridor everything is grey value on paper: walls
+// light, roofs a mid wash lightening with distance. Inside it, the region's
+// colours. A roof seen from below (an eave) is shaded as a soffit (tile
+// space runs y-down, so a roof's underside is its front face). Every
+// pattern fades out before it is too fine to draw.
 const FACE_FRAGMENT = `#version 300 es
 precision highp float;
 in vec2 v_uv;
@@ -136,77 +164,121 @@ flat in int v_colour;
 uniform vec3 u_paper;
 uniform vec3 u_ink;
 uniform vec3 u_palette[8];
+uniform vec3 u_roof;
+uniform int u_region;
 out vec4 fragColor;
-
-// A line every 'spacing' metres along 'coord', 'px' pixels wide.
+float ink, glass;
 float lines(float coord, float spacing, float px) {
   float w = fwidth(coord);
   float d = abs(fract(coord / spacing + 0.5) - 0.5) * spacing;
   return (1.0 - smoothstep(px * w * 0.5, px * w * 0.5 + w, d)) * (1.0 - smoothstep(spacing * 0.15, spacing * 0.35, w));
 }
-// Inside the box [a, b] on both axes of a repeating cell.
 float within(vec2 cell, vec2 a, vec2 b) {
   vec2 w = fwidth(cell);
   vec2 lo = smoothstep(a - w, a, cell);
   vec2 hi = 1.0 - smoothstep(b, b + w, cell);
   return lo.x * lo.y * hi.x * hi.y;
 }
-// The outline of that box.
 float frame(vec2 cell, vec2 a, vec2 b, float px) {
   vec2 w = fwidth(cell) * px;
-  float outer = within(cell, a - w * 0.5, b + w * 0.5);
-  float inner = within(cell, a + w * 0.5, b - w * 0.5);
-  return clamp(outer - inner, 0.0, 1.0);
+  return clamp(within(cell, a - w * 0.5, b + w * 0.5) - within(cell, a + w * 0.5, b - w * 0.5), 0.0, 1.0);
 }
 float fadeAt(float size) {
   return 1.0 - smoothstep(size * 0.08, size * 0.2, max(fwidth(v_uv.x), fwidth(v_uv.y)));
 }
-
+void win(vec2 uv, float bay, float storey, vec2 size, float sill, float g) {
+  vec2 c = vec2(mod(uv.x, bay), mod(uv.y, storey));
+  vec2 a = vec2((bay - size.x) * 0.5, sill);
+  float f = fadeAt(storey);
+  ink = max(ink, frame(c, a, a + size, 0.9) * f);
+  glass = max(glass, within(c, a, a + size) * g * f);
+}
+void floors(float y, float storey, float k) {
+  ink = max(ink, lines(y, storey, 0.7) * fadeAt(storey) * k);
+}
 void main() {
-  vec3 base = u_paper;
-  // Colour 255 (or anything past the palette) is a building not explored.
-  if (v_colour < 8) base = mix(u_paper, u_palette[v_colour], v_strength);
-  float ink = 0.0;
-  float glass = 0.0;
   vec2 uv = v_uv;
-  if (v_kind == 2) {
-    // A tower: storeys of 3.4 m, bays of 2.6 m, a shopfront at street level.
-    float storey = 3.4;
-    float bay = 2.6;
-    vec2 cell = vec2(mod(uv.x, bay), mod(uv.y, storey));
-    float fade = fadeAt(storey);
-    if (uv.y < storey) {
-      vec2 shop = vec2(mod(uv.x, 5.2), uv.y);
-      ink = max(ink, frame(shop, vec2(0.35, 0.25), vec2(4.85, 2.9), 1.0) * fade);
-      glass = within(shop, vec2(0.35, 0.25), vec2(4.85, 2.9)) * 0.5 * fade;
+  ink = 0.0;
+  glass = 0.0;
+  bool lit = v_colour < 8 && v_strength > 0.0;
+  float far = smoothstep(0.04, 0.45, max(fwidth(uv.x), fwidth(uv.y)));
+  vec3 base = lit ? mix(u_paper, u_palette[v_colour], v_strength) : u_paper;
+  int k = v_kind;
+  if (k == 3 || k == 14) {
+    vec3 grey = u_paper * mix(0.66, 0.84, far);
+    base = lit ? mix(grey, mix(u_roof, u_paper, far * 0.4), v_strength) : grey;
+    if (k == 3) ink = max(lines(uv.y, 0.32, 0.6) * 0.3 * fadeAt(1.3), lines(uv.x, 0.9, 0.6) * 0.35 * fadeAt(3.5));
+    else ink = lines(uv.x, 0.6, 0.6) * 0.3 * fadeAt(2.4);
+    if (gl_FrontFacing) base *= 0.62;
+  } else if (k == 0) {
+    base = (lit ? base : u_paper) * 0.93;
+  } else if (k == 1) {
+    if (u_region == 1) {
+      if (uv.y < 2.9) {
+        vec2 f = vec2(mod(uv.x, 7.0), uv.y);
+        ink = max(frame(f, vec2(3.0, 0.0), vec2(4.0, 2.1), 1.0), frame(f, vec2(0.6, 0.7), vec2(2.4, 2.2), 0.9)) * fadeAt(2.9);
+        ink = max(ink, within(f, vec2(0.6, 0.7), vec2(2.4, 2.2)) * lines(uv.x, 0.14, 0.7) * fadeAt(0.5) * 0.7);
+      } else win(uv, 3.6, 2.9, vec2(0.9, 1.1), 0.95, 0.3);
+      floors(uv.y, 2.9, 0.4);
+    } else if (u_region == 2 || u_region == 3) {
+      win(uv, 3.0, 3.2, vec2(0.9, 1.6), 0.9, 0.35);
+      vec2 c = vec2(mod(uv.x, 3.0), mod(uv.y, 3.2));
+      ink = max(ink, (within(c, vec2(0.6, 0.9), vec2(1.02, 2.5)) + within(c, vec2(1.98, 0.9), vec2(2.4, 2.5))) * 0.35 * fadeAt(3.2));
+    } else if (u_region == 4) {
+      win(uv, 2.6, 3.0, vec2(0.9, 1.5), 0.85, 0.3);
+      ink = max(ink, within(vec2(mod(uv.x, 2.6), mod(uv.y, 3.0)), vec2(0.85, 1.58), vec2(1.75, 1.62)) * fadeAt(3.0));
+    } else if (u_region == 5) {
+      win(uv, 4.0, 2.8, vec2(1.0, 1.2), 0.9, 0.3);
+      ink = max(ink, lines(uv.y, 0.25, 0.5) * 0.25 * fadeAt(1.2));
+    } else win(uv, 3.4, 3.0, vec2(1.0, 1.3), 0.9, 0.3);
+  } else if (k == 2) {
+    if (uv.y < 4.2) {
+      vec2 f = vec2(mod(uv.x, 5.2), uv.y);
+      ink = frame(f, vec2(0.35, 0.3), vec2(4.85, 3.4), 1.0) * fadeAt(4.0);
+      glass = within(f, vec2(0.35, 0.3), vec2(4.85, 3.4)) * 0.5 * fadeAt(4.0);
     } else {
-      ink = max(ink, lines(uv.y, storey, 0.8) * fade * 0.8);
-      ink = max(ink, frame(cell, vec2(0.45, 0.9), vec2(2.15, 2.6), 0.9) * fade);
-      glass = within(cell, vec2(0.45, 0.9), vec2(2.15, 2.6)) * 0.35 * fade;
+      win(uv - vec2(0.0, 4.2), 2.4, 3.2, vec2(1.2, 1.6), 0.9, 0.35);
+      floors(uv.y - 4.2, 3.2, 0.5);
     }
-  } else if (v_kind == 1) {
-    // A house: storeys of 2.9 m, a window in each 3.6 m bay; on the ground
-    // floor a slatted lattice and, every 7 m, a door.
-    float storey = 2.9;
-    vec2 cell = vec2(mod(uv.x, 3.6), mod(uv.y, storey));
-    float fade = fadeAt(storey);
-    if (uv.y < storey) {
-      vec2 front = vec2(mod(uv.x, 7.0), uv.y);
-      float door = frame(front, vec2(3.0, 0.0), vec2(4.0, 2.1), 1.0);
-      float lattice = within(front, vec2(0.6, 0.7), vec2(2.4, 2.2)) * lines(uv.x, 0.14, 0.7) * fadeAt(0.5);
-      ink = max(ink, max(door, frame(front, vec2(0.6, 0.7), vec2(2.4, 2.2), 0.9)) * fade);
-      ink = max(ink, lattice * 0.7);
-    } else {
-      ink = max(ink, frame(cell, vec2(1.0, 0.8), vec2(2.6, 2.0), 0.9) * fade);
-      glass = within(cell, vec2(1.0, 0.8), vec2(2.6, 2.0)) * 0.3 * fade;
+  } else if (k == 5) {
+    if (uv.y < 3.4) ink = frame(vec2(mod(uv.x, 14.0), uv.y), vec2(6.0, 0.0), vec2(8.4, 2.6), 1.0) * fadeAt(3.4);
+    else {
+      vec2 c = vec2(mod(uv.x, 3.6), mod(uv.y - 3.4, 2.9));
+      float f = fadeAt(2.9);
+      float front = step(c.y, 1.1);
+      glass = within(c, vec2(0.3, 1.1), vec2(3.3, 2.55)) * 0.5 * f;
+      base = mix(base, base * 1.06, front * f);
+      ink = max(lines(uv.y - 3.4, 2.9, 1.2) * fadeAt(2.0), lines(uv.y - 4.5, 2.9, 0.9) * f);
+      ink = max(ink, within(c, vec2(-1.0, 2.6), vec2(9.0, 2.9)) * 0.45 * f);
+      ink = max(ink, (1.0 - front) * lines(uv.x, 3.6, 0.9) * f * 0.8);
     }
-    ink = max(ink, lines(uv.y, storey, 0.6) * fade * 0.5 * step(storey * 0.5, uv.y));
-  } else if (v_kind == 3) {
-    // Tiled roof: rows up the slope, ribs along it, lighter.
-    ink = max(lines(uv.y, 0.32, 0.7) * 0.55, lines(uv.x, 0.26, 0.5) * 0.25) * fadeAt(0.32 * 4.0);
+  } else if (k == 6) {
+    floors(uv.y, 3.0, 0.25);
+  } else if (k == 7) {
+    float f = fadeAt(3.6);
+    glass = (1.0 - within(vec2(uv.x, mod(uv.y, 3.6)), vec2(-1e5, 0.0), vec2(1e5, 0.9))) * 0.6 * f;
+    ink = max(lines(uv.x, 1.5, 0.7) * f * 0.6, lines(uv.y, 3.6, 0.8) * f);
+  } else if (k == 8) {
+    ink = lines(uv.x, 0.3, 0.5) * 0.25 * fadeAt(1.2);
+    ink = max(ink, frame(vec2(mod(uv.x, 24.0), uv.y), vec2(10.0, 0.0), vec2(14.0, 4.5), 1.0) * fadeAt(4.5));
+    glass = within(vec2(uv.x, uv.y), vec2(-1e5, 5.0), vec2(1e5, 5.8)) * 0.4 * fadeAt(3.0);
+  } else if (k == 9) {
+    vec2 c = vec2(uv.x, mod(uv.y, 3.8));
+    float f = fadeAt(3.8);
+    glass = within(c, vec2(-1e5, 1.0), vec2(1e5, 2.6)) * 0.45 * f;
+    ink = max(lines(uv.x, 1.8, 0.6) * within(c, vec2(-1e5, 1.0), vec2(1e5, 2.6)) * f, lines(uv.y, 3.8, 0.8) * f);
+  } else if (k == 10) {
+    float f = fadeAt(4.0);
+    glass = within(uv, vec2(-1e5, 0.3), vec2(1e5, 3.6)) * 0.55 * f;
+    ink = max(lines(uv.x, 3.0, 0.8) * step(uv.y, 3.6) * f, within(uv, vec2(-1e5, 3.8), vec2(1e5, 4.6)) * 0.5 * f);
+  } else if (k == 11 || k == 12) {
+    if (k == 12 && lit) base = mix(u_paper, vec3(0.82, 0.32, 0.22), v_strength);
+    ink = max(lines(uv.x, 2.0, 2.2) * fadeAt(4.0), step(uv.y, 0.9) * 0.4 * fadeAt(2.0));
+  } else if (k == 13) {
+    win(uv, 4.0, 40.0, vec2(1.0, 4.0), 2.5, 0.45);
   }
   vec3 colour = base * v_shade;
-  colour = mix(colour, mix(colour, vec3(0.86, 0.88, 0.9) * v_shade, 0.6), glass);
+  colour = mix(colour, mix(colour, vec3(0.78, 0.81, 0.84) * v_shade, 0.6), glass);
   colour = mix(colour, u_ink, clamp(ink, 0.0, 1.0) * 0.85);
   fragColor = vec4(colour, 1.0);
 }`;
@@ -490,7 +562,7 @@ export function createEdgeLayer({
       program = link(VERTEX, FRAGMENT);
       faceProgram = link(FACE_VERTEX, FACE_FRAGMENT);
       for (const name of ["u_matrix", "u_viewport", "u_width", "u_wobble", "u_overshoot", "u_seed", "u_colour", "u_bias", "u_fade"]) uniforms[name] = gl.getUniformLocation(program, name);
-      for (const name of ["u_matrix", "u_bias", "u_paper", "u_ink", "u_palette"]) uniforms[`face_${name}`] = gl.getUniformLocation(faceProgram, name);
+      for (const name of ["u_matrix", "u_bias", "u_paper", "u_ink", "u_palette", "u_roof", "u_region"]) uniforms[`face_${name}`] = gl.getUniformLocation(faceProgram, name);
       worker = new Worker(new URL("./sketch-edge-worker.ts", import.meta.url), { type: "module" });
       worker.onmessage = receive;
       added.on("moveend", onMove);
@@ -547,9 +619,16 @@ export function createEdgeLayer({
       g.uniform1f(uniforms.face_u_bias, edgeBias() * 0.5);
       g.uniform3f(uniforms.face_u_paper, ...stroke.paper);
       g.uniform3f(uniforms.face_u_ink, ...stroke.colour);
-      g.uniform3fv(uniforms.face_u_palette, PALETTE);
+      let shown: RegionId | null = null;
       for (const [key, tile] of tiles) {
         if (!visible.has(key) || tile.faceCount === 0) continue;
+        const region = tileRegion(key);
+        if (region !== shown) {
+          shown = region;
+          g.uniform3fv(uniforms.face_u_palette, PALETTES[region].walls);
+          g.uniform3f(uniforms.face_u_roof, ...PALETTES[region].roof);
+          g.uniform1i(uniforms.face_u_region, REGIONS.indexOf(region));
+        }
         g.uniformMatrix4fv(uniforms.face_u_matrix, false, matrixFor(key, tile.extent, riseOf(tile)));
         g.bindVertexArray(tile.faceVao);
         g.drawArrays(g.TRIANGLES, 0, tile.faceCount);

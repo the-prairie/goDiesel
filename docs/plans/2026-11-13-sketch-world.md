@@ -681,3 +681,64 @@ Bundles:
 - Overland is 131.8 of 150 KiB (was 129.9);
 - the replay engine is 13.7 KB (was 13.5);
 - the sketch world is unchanged.
+
+## Round 10: the drawn city's buildings
+
+**What the data has.** I decoded OpenFreeMap tiles with the worker's reader.
+- Buildings carry render_height and render_min_height, and a colour where OSM
+  tags one.
+- There are no building-type or roof tags in OpenMapTiles.
+- Type comes from context instead:
+  - land use (industrial, school, university, hospital, retail);
+  - places of worship (buddhist, shinto, christian points);
+  - gates.
+- Land cover gives gardens and grass.
+
+**S29. Regional building rules.** All pure and tested, in
+`sketch-region.ts`, `sketch-form.ts` and `sketch-massing.ts`, read in one
+pass by `readContext`:
+- *Region* from longitude and latitude: Japan, Mediterranean, Aegean
+  (Greece, the Canaries), northern Europe, North America, tropical, and
+  "other" as a neutral city. Each sets its houses' roof (form, pitch,
+  eaves), its facade style and its colours.
+- *Form* from footprint, height and land use: house, low block, mansion
+  (Japan), block, tower, shed (industrial), institution (school, hospital),
+  retail.
+  - Japanese mid-rises are mansion blocks: balcony bands on the long faces,
+    blank end walls, a plain ground floor with entrances, a plant room on
+    the roof.
+  - Towers outside Japan and the south get curtain walls.
+  - Low Mediterranean blocks get low hipped roofs.
+- *Landmarks* from a place of worship inside a footprint:
+  - a temple: low walls with posts under a deep-eaved irimoya roof;
+  - a shrine: a deep-eaved gable, vermilion where explored;
+  - a church: a steep roof and a tower with a spire.
+  - A point in no footprint is skipped.
+- *Torii*, in ink, at gates within 40 m of a shrine.
+- *Shrubs*: low ones in gardens and grass, as the trees in parks.
+- *Facades in the shader*, not geometry: windows at human scale, ground
+  floors, storey rhythm, balconies, ribs and posts. The patterns fade out
+  with distance.
+- *Eaves at no triangle cost*:
+  - Roof planes overhang the walls: 0.7 m on Japanese houses, 1.6 m on
+    temples.
+  - Their undersides are shaded as soffits.
+  - Kawara is a warm charcoal; tile lines show only close up.
+- *Colour only where she has been* (correction A).
+  - Outside her corridor: grey value on paper, with light walls and roofs a
+    mid wash lightening with distance.
+  - Inside it: the region's wall palette and roof material.
+
+**Cost**, before and after, best of three on the same tiles (Kyoto ×4,
+Fushimi, Calgary ×2, Rome ×2):
+- Build time:
+  - Node, V8: −5% in all (Kyoto −5%, Calgary and Rome a few ms more per
+    tile).
+  - Simulator Safari: −18% in all (Kyoto −23%). The neighbour-height
+    lookup now keeps only real heights and asks only when a height is
+    invented, which offsets the new work.
+- Triangles −2% (Kyoto −0.6%, Rome −9.5%).
+- In-browser triangles in the same Kyoto views:
+  - street: +0.4%;
+  - wide: −1.6%.
+- Sketch bundle: 85.8 KiB, against a budget raised to 86 KiB.

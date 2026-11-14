@@ -10,17 +10,6 @@ export interface Footprint {
   minHeight: number;
 }
 
-/** The real colours buildings come back in: plaster, timber, tile, stone. */
-export const BUILDING_COLOURS: [number, number, number][] = [
-  [0.97, 0.92, 0.83],
-  [0.94, 0.85, 0.73],
-  [0.9, 0.79, 0.67],
-  [0.96, 0.89, 0.79],
-  [0.86, 0.88, 0.85],
-  [0.93, 0.81, 0.73],
-  [0.82, 0.7, 0.6],
-];
-
 const cross = (o: [number, number], a: [number, number], b: [number, number]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
 
 /** Indices of triangles covering a simple ring (closed or not), by ear clipping. */

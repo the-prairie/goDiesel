@@ -57,13 +57,15 @@ class Reader {
 
 type Value = string | number | boolean;
 
+const text = new TextDecoder();
+
 function readValue(reader: Reader): Value {
   let value: Value = 0;
   while (!reader.done) {
     const tag = reader.varint();
     const field = tag >> 3;
     const wire = tag & 7;
-    if (field === 1) value = new TextDecoder().decode(reader.sub().buf);
+    if (field === 1) value = text.decode(reader.sub().buf);
     else if (field === 2) {
       value = new DataView(reader.buf.buffer, reader.buf.byteOffset + reader.pos, 4).getFloat32(0, true);
       reader.pos += 4;
@@ -139,13 +141,18 @@ function readLayers(data: Uint8Array, names: readonly string[]) {
     let name = "";
     let extent = 4096;
     const keys: string[] = [];
-    const values: Value[] = [];
+    const values: Reader[] = [];
+    const decoded = new Map<number, Value>();
+    const valueAt = (index: number) => {
+      if (!decoded.has(index)) decoded.set(index, readValue(values[index]));
+      return decoded.get(index)!;
+    };
     const features: { id: number; tags: number[]; type: number; geometry: number[] }[] = [];
     while (!layer.done) {
       const ltag = layer.varint();
       const field = ltag >> 3;
       if (field === 1) {
-        name = new TextDecoder().decode(layer.sub().buf);
+        name = text.decode(layer.sub().buf);
         // Not a layer we want: skip the rest of it unread.
         if (!names.includes(name)) break;
       } else if (field === 2) {
@@ -161,8 +168,9 @@ function readLayers(data: Uint8Array, names: readonly string[]) {
           else feature.skip(ftag & 7);
         }
         features.push(parsed);
-      } else if (field === 3) keys.push(new TextDecoder().decode(layer.sub().buf));
-      else if (field === 4) values.push(readValue(layer.sub()));
+      } else if (field === 3) keys.push(text.decode(layer.sub().buf));
+      // Values are read only when a feature's property is: a POI layer's many names never are.
+      else if (field === 4) values.push(layer.sub());
       else if (field === 5) extent = layer.varint();
       else layer.skip(ltag & 7);
     }
@@ -171,7 +179,10 @@ function readLayers(data: Uint8Array, names: readonly string[]) {
       extent,
       features: features.map((feature) => {
         const props: Record<string, Value> = {};
-        for (let i = 0; i + 1 < feature.tags.length; i += 2) props[keys[feature.tags[i]]] = values[feature.tags[i + 1]];
+        for (let i = 0; i + 1 < feature.tags.length; i += 2) {
+          const key = keys[feature.tags[i]];
+          if (!key.startsWith("name")) props[key] = valueAt(feature.tags[i + 1]);
+        }
         return { id: feature.id, type: feature.type, props, geometry: feature.geometry };
       }),
     });
@@ -225,6 +236,52 @@ export function readParks(data: Uint8Array): [number, number][][][] {
     }
   }
   return out;
+}
+
+/** Polygons from features, each its outer ring then holes. */
+function polygons(features: readonly RawFeature[]) {
+  const out: [number, number][][][] = [];
+  for (const feature of features) {
+    if (feature.type !== 3) continue;
+    let current: [number, number][][] | null = null;
+    for (const ring of decodeRings(feature.geometry, true)) {
+      if (signedArea(ring) > 0 || !current) {
+        current = [ring];
+        out.push(current);
+      } else current.push(ring);
+    }
+  }
+  return out;
+}
+
+const pointOf = (feature: RawFeature) => ({ x: unzig(feature.geometry[1]), y: unzig(feature.geometry[2]) });
+
+/**
+ * What the buildings stand among, read in one pass: land use (a building's
+ * type), places of worship and gates (landmarks and torii), gardens and grass
+ * (shrubs), and parks and woods (trees). Tile units.
+ */
+export function readContext(data: Uint8Array) {
+  const layers = readLayers(data, ["landuse", "poi", "landcover", "park"]);
+  const landuse = (layers.get("landuse")?.features ?? []).flatMap((feature) =>
+    polygons([feature]).map((rings) => ({ cls: String(feature.props.class), ring: rings[0] })),
+  );
+  const worship: { x: number; y: number; subclass: string }[] = [];
+  const gates: { x: number; y: number }[] = [];
+  for (const feature of layers.get("poi")?.features ?? []) {
+    if (feature.type !== 1 || feature.geometry.length < 3) continue;
+    if (feature.props.class === "place_of_worship") worship.push({ ...pointOf(feature), subclass: String(feature.props.subclass) });
+    else if (feature.props.class === "gate") gates.push(pointOf(feature));
+  }
+  const cover = layers.get("landcover")?.features ?? [];
+  const isWood = (feature: RawFeature) => ["wood", "forest"].includes(String(feature.props.class));
+  return {
+    landuse,
+    worship,
+    gates,
+    gardens: polygons(cover.filter((feature) => !isWood(feature) && ["garden", "grass", "park", "flowerbed"].includes(String(feature.props.subclass)))),
+    parks: [...polygons(layers.get("park")?.features ?? []), ...polygons(cover.filter(isWood))],
+  };
 }
 
 export interface ExploredId {

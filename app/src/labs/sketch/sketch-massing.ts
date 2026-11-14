@@ -12,6 +12,8 @@
 
 import { buildingEdges } from "@/labs/sketch/sketch-edges";
 import { triangulate } from "@/labs/sketch/sketch-faces";
+import { buildingForm, type Form, type Landmark } from "@/labs/sketch/sketch-form";
+import type { RegionId } from "@/labs/sketch/sketch-region";
 
 type P = [number, number];
 
@@ -19,10 +21,30 @@ type P = [number, number];
 export const MASS_STRIDE = 9;
 
 /** What a face is, for the facade shader. */
-export const FACE = { flatRoof: 0, houseWall: 1, towerWall: 2, tiledRoof: 3, gable: 4 } as const;
+export const FACE = {
+  flatRoof: 0,
+  houseWall: 1,
+  towerWall: 2,
+  tiledRoof: 3,
+  gable: 4,
+  /** A mansion block's long face: a balcony band each storey. */
+  balcony: 5,
+  /** An end or party wall: storey lines only. */
+  blank: 6,
+  /** A curtain wall: mullions and spandrels. */
+  glass: 7,
+  shed: 8,
+  /** A school or hospital: ribbon windows. */
+  ribbon: 9,
+  retail: 10,
+  temple: 11,
+  shrine: 12,
+  church: 13,
+  sheetRoof: 14,
+} as const;
 
-export type Region = "japan" | "other";
-export type Roof = "gable" | "hip" | "parapet" | "flat";
+export type Region = RegionId;
+export type Roof = "gable" | "hip" | "irimoya" | "steep" | "parapet" | "flat" | "sheet";
 
 /** Above this, a height in the data is taken as real; below, it may be the default. */
 const TRUSTED_M = 7.5;
@@ -101,12 +123,38 @@ export function orientedBox(ring: readonly P[]) {
   return { corners: best?.corners ?? [], long: best?.long ?? 0, short: best?.short ?? 0, rectangularity: area > 0 ? ringArea(ring) / area : 0 };
 }
 
-/** The roof a building of this kind gets in this region. */
-export function roofFor({ height, areaM2, rectangularity, aspect, region }: { height: number; areaM2: number; rectangularity: number; aspect: number; region: Region }): Roof {
-  if (height > 12) return "parapet";
-  if (region === "japan" && height <= 10 && rectangularity >= 0.85 && areaM2 <= 400) return aspect >= 1.4 ? "gable" : "hip";
-  return "flat";
+/** Each region's houses: how steep, how deep the eaves, and which roof for a long or a squarish plan. */
+const REGION_ROOF: Record<RegionId, { pitch: number; eaveM: number; long: Roof; square: Roof }> = {
+  japan: { pitch: 0.32, eaveM: 0.7, long: "gable", square: "hip" },
+  mediterranean: { pitch: 0.2, eaveM: 0.3, long: "hip", square: "hip" },
+  aegean: { pitch: 0, eaveM: 0, long: "flat", square: "flat" },
+  "northern-europe": { pitch: 0.55, eaveM: 0.25, long: "gable", square: "gable" },
+  "north-america": { pitch: 0.38, eaveM: 0.4, long: "gable", square: "hip" },
+  tropical: { pitch: 0.5, eaveM: 1, long: "hip", square: "hip" },
+  other: { pitch: 0.3, eaveM: 0.35, long: "gable", square: "hip" },
+};
+
+export const regionRoof = (region: RegionId) => REGION_ROOF[region];
+
+/** The roof a building of this form gets in this region; landmarks have their own. */
+export function roofFor({ form, rectangularity, aspect, region, landmark, height }: { form: Form; areaM2: number; rectangularity: number; aspect: number; region: RegionId; landmark?: Landmark; height?: number }): Roof {
+  if (landmark === "temple") return "irimoya";
+  if (landmark === "shrine") return "gable";
+  if (landmark === "church") return "steep";
+  if (form === "shed") return "sheet";
+  if (form === "house") return aspect >= 1.4 ? REGION_ROOF[region].long : REGION_ROOF[region].square;
+  // Italian and Spanish blocks: a low hipped roof of tiles, not a flat top.
+  if (form === "block" && region === "mediterranean" && rectangularity >= 0.8 && (height ?? Infinity) <= 20) return "hip";
+  return (height ?? Infinity) > 12 ? "parapet" : "flat";
 }
+
+/** How each pitched roof is drawn: pitch, eaves, how far its hips pull the ridge in (of the short side), and a cap on its rise. */
+const PITCHED: Partial<Record<Roof, { pitch?: number; eaveM?: number; pull: number; maxRise: number }>> = {
+  gable: { pull: 0, maxRise: 5 },
+  hip: { pull: 0.5, maxRise: 5 },
+  irimoya: { pitch: 0.45, eaveM: 1.6, pull: 0.3, maxRise: 10 },
+  steep: { pitch: 0.75, eaveM: 0.3, pull: 0, maxRise: 12 },
+};
 
 /** A ring pulled inwards by `by` units at every corner (mitred). */
 function inset(ring: readonly P[], by: number): P[] {
@@ -144,36 +192,65 @@ function normalLeft(a: P, b: P, sign: number): P {
 
 export interface MassContext {
   metresPerUnit: number;
-  region: Region;
+  region: RegionId;
   seed: number;
   neighbours: readonly number[];
   /** Cut by the tile's edge: keep the data's height and a flat roof, so both halves agree. */
   clipped?: boolean;
-  /** Explored: how strongly (0..1) and in which of the real colours. */
+  /** Explored: how strongly (0..1) and in which of the region's colours. */
   explored?: { strength: number; colour: number };
+  /** The land use class the footprint stands in, if any. */
+  landuse?: string;
+  /** A place of worship inside the footprint. */
+  landmark?: Landmark;
 }
+
+const ROOFTOP_M = 2.6;
 
 export function buildingMass(footprint: { rings: P[][]; height: number; minHeight: number }, ctx: MassContext) {
   const m = ctx.metresPerUnit;
   const outer = footprint.rings[0];
   const areaM2 = ringArea(outer) * m * m;
   const box = orientedBox(outer);
-  const height = ctx.clipped ? footprint.height : inferHeight({ dataHeight: footprint.height, areaM2, neighbours: ctx.neighbours, seed: ctx.seed });
-  const roof: Roof = ctx.clipped ? (height > 12 ? "parapet" : "flat") : roofFor({ height, areaM2, rectangularity: box.rectangularity, aspect: box.short > 0 ? box.long / box.short : 1, region: ctx.region });
+  const aspect = box.short > 0 ? box.long / box.short : 1;
+  const inferred = ctx.clipped ? footprint.height : inferHeight({ dataHeight: footprint.height, areaM2, neighbours: ctx.neighbours, seed: ctx.seed });
+  const form = buildingForm({ areaM2, height: inferred, rectangularity: ctx.clipped ? 0 : box.rectangularity, region: ctx.region, landuse: ctx.landuse });
+  // A landmark needs a plan its roof can stand on; otherwise it is drawn as its form.
+  const landmark = !ctx.clipped && box.rectangularity >= 0.7 ? ctx.landmark : undefined;
+  const roof: Roof = ctx.clipped ? (form === "shed" ? "sheet" : inferred > 12 ? "parapet" : "flat") : roofFor({ form, areaM2, rectangularity: footprint.rings.length > 1 ? 0 : box.rectangularity, aspect, region: ctx.region, landmark, height: inferred });
+  // Temples and shrines stand low under their roofs.
+  const height = landmark === "temple" || landmark === "shrine" ? Math.min(inferred, landmark === "temple" ? 5.5 : 4) : inferred;
   const base = footprint.minHeight;
   const eave = height;
-  const wallKind = height > 10 ? FACE.towerWall : FACE.houseWall;
   const strength = ctx.explored?.strength ?? 0;
   const colour = ctx.explored?.colour ?? -1;
   const faces: number[] = [];
   const edges: number[] = [];
   const vertex = (p: P, z: number, u: number, v: number, shade: number, kind: number) => faces.push(p[0], p[1], z, u, v, shade, kind, strength, colour);
   const edge = (a: P, za: number, b: P, zb: number) => edges.push(a[0], a[1], za, b[0], b[1], zb);
+  const unitOf = (a: P, b: P): P => {
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    return [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+  };
+  const axis = box.corners.length === 4 ? unitOf(box.corners[0], box.corners[1]) : ([1, 0] as P);
+  /** The face a wall from a to b gets, by the building's form and which way it faces. */
+  const wallKind = (a: P, b: P) => {
+    if (landmark) return FACE[landmark];
+    if (form === "house") return FACE.houseWall;
+    if (form === "shed" || form === "retail") return FACE[form];
+    if (form === "institution") return FACE.ribbon;
+    if (form === "mansion") {
+      const d = unitOf(a, b);
+      return Math.abs(d[0] * axis[0] + d[1] * axis[1]) > 0.8 ? FACE.balcony : FACE.blank;
+    }
+    if (form === "tower" && !["japan", "mediterranean", "aegean", "tropical"].includes(ctx.region)) return FACE.glass;
+    return FACE.towerWall;
+  };
   const wallShade = (a: P, b: P) => {
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
     return 0.82 + 0.12 * Math.abs(((b[1] - a[1]) / length) * 0.6 + ((a[0] - b[0]) / length) * 0.4);
   };
-  /** A wall from a to b, from z0 to z1, its u running from u0 in metres. */
+  /** A wall from a to b, from z0 to z1, its u running in metres along it. */
   const wall = (a: P, b: P, z0: number, z1: number, kind: number) => {
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]) * m;
     const shade = wallShade(a, b);
@@ -184,76 +261,142 @@ export function buildingMass(footprint: { rings: P[][]; height: number; minHeigh
     vertex(b, z1, length, z1, shade, kind);
     vertex(a, z1, 0, z1, shade, kind);
   };
-  const flatTop = (ring: P[], z: number) => {
-    for (const index of triangulate(ring)) vertex(ring[index], z, ring[index][0] * m, ring[index][1] * m, 1, FACE.flatRoof);
+  const flatTop = (ring: P[], z: number, kind: number = FACE.flatRoof) => {
+    for (const index of triangulate(ring)) vertex(ring[index], z, ring[index][0] * m, ring[index][1] * m, 1, kind);
+  };
+  /** A box on the roof (plant room, water tank): ten triangles. */
+  const rooftop = (z: number) => {
+    const [c0, c1, , c3] = box.corners;
+    const u = unitOf(c0, c1);
+    const v = unitOf(c0, c3);
+    const centre: P = box.corners.reduce((sum, p) => [sum[0] + p[0] / 4, sum[1] + p[1] / 4], [0, 0] as P);
+    const hl = Math.min(8, 0.3 * box.long * m) / m / 2;
+    const hw = Math.min(6, 0.3 * box.short * m) / m / 2;
+    const at = (su: number, sv: number): P => [centre[0] + u[0] * hl * su + v[0] * hw * sv, centre[1] + u[1] * hl * su + v[1] * hw * sv];
+    const ring = [at(-1, -1), at(1, -1), at(1, 1), at(-1, 1)];
+    const top = z + ROOFTOP_M;
+    for (let i = 0; i < 4; i += 1) {
+      const a = ring[i];
+      const b = ring[(i + 1) % 4];
+      wall(a, b, z, top, FACE.blank);
+      edge(a, z, a, top);
+      edge(a, top, b, top);
+    }
+    flatTop([...ring, ring[0]], top);
   };
 
-  if (roof === "gable" || roof === "hip") {
+  const pitched = PITCHED[roof];
+  if (pitched && box.corners.length === 4) {
     const [c0, c1, c2, c3] = box.corners;
+    const style = REGION_ROOF[ctx.region];
     const short = box.short;
-    const ridgeZ = eave + Math.min(3.5, 0.32 * short * m);
+    const rise = Math.min(pitched.maxRise, (pitched.pitch ?? style.pitch) * short * m);
+    const over = (pitched.eaveM ?? (roof === "gable" && landmark === "shrine" ? 1 : style.eaveM)) / m;
+    const ridgeZ = eave + rise;
+    const lipZ = eave - Math.min(0.4, over * m * 0.35);
+    const u = unitOf(c0, c1);
+    const v = unitOf(c0, c3);
+    const out = (p: P, su: number, sv: number): P => [p[0] + (u[0] * su + v[0] * sv) * over, p[1] + (u[1] * su + v[1] * sv) * over];
+    const e0 = out(c0, -1, -1);
+    const e1 = out(c1, 1, -1);
+    const e2 = out(c2, 1, 1);
+    const e3 = out(c3, -1, 1);
     const mid = (a: P, b: P): P => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    let r0 = mid(c0, c3);
-    let r1 = mid(c1, c2);
-    if (roof === "hip") {
-      const dx = (r1[0] - r0[0]) / box.long;
-      const dy = (r1[1] - r0[1]) / box.long;
-      const pull = Math.min(short / 2, box.long / 2);
-      r0 = [r0[0] + dx * pull, r0[1] + dy * pull];
-      r1 = [r1[0] - dx * pull, r1[1] - dy * pull];
-    }
-    const sides: [P, P][] = [
-      [c0, c1],
-      [c1, c2],
-      [c2, c3],
-      [c3, c0],
-    ];
-    for (const [a, b] of sides) {
-      wall(a, b, base, eave, wallKind);
+    // The ridge: over the gables' verges for a gable, pulled in for hips.
+    const pull = pitched.pull ? Math.min(short * pitched.pull, box.long / 2) : -over;
+    const r0: P = [mid(c0, c3)[0] + u[0] * pull, mid(c0, c3)[1] + u[1] * pull];
+    const r1: P = [mid(c1, c2)[0] - u[0] * pull, mid(c1, c2)[1] - u[1] * pull];
+    for (const [a, b] of [[c0, c1], [c1, c2], [c2, c3], [c3, c0]] as [P, P][]) {
+      wall(a, b, base, eave, wallKind(a, b));
       edge(a, base, b, base);
-      edge(a, eave, b, eave);
       edge(a, base, a, eave);
     }
-    // Roof slopes: u along the eave, v up the slope, in metres.
-    const slope = Math.hypot((short * m) / 2, ridgeZ - eave);
+    // Roof planes from the lip of the eaves up to the ridge; seen from below, the shader shades them as soffits.
+    const slope = Math.hypot((short * m) / 2 + over * m, rise);
+    const along = (a: P, b: P, p: P) => (((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / (Math.hypot(b[0] - a[0], b[1] - a[1]) || 1)) * m;
     const plane = (a: P, b: P, ra: P, rb: P, shade: number) => {
       const length = Math.hypot(b[0] - a[0], b[1] - a[1]) * m;
-      const ua = 0;
-      const ub = length;
-      const along = (p: P) => ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / (Math.hypot(b[0] - a[0], b[1] - a[1]) || 1) * m;
-      vertex(a, eave, ua, 0, shade, FACE.tiledRoof);
-      vertex(b, eave, ub, 0, shade, FACE.tiledRoof);
-      vertex(rb, ridgeZ, along(rb), slope, shade, FACE.tiledRoof);
-      vertex(a, eave, ua, 0, shade, FACE.tiledRoof);
-      vertex(rb, ridgeZ, along(rb), slope, shade, FACE.tiledRoof);
-      vertex(ra, ridgeZ, along(ra), slope, shade, FACE.tiledRoof);
+      vertex(a, lipZ, 0, 0, shade, FACE.tiledRoof);
+      vertex(b, lipZ, length, 0, shade, FACE.tiledRoof);
+      vertex(rb, ridgeZ, along(a, b, rb), slope, shade, FACE.tiledRoof);
+      vertex(a, lipZ, 0, 0, shade, FACE.tiledRoof);
+      vertex(rb, ridgeZ, along(a, b, rb), slope, shade, FACE.tiledRoof);
+      vertex(ra, ridgeZ, along(a, b, ra), slope, shade, FACE.tiledRoof);
     };
-    plane(c0, c1, r0, r1, 0.93);
-    plane(c2, c3, r1, r0, 0.84);
-    const end = (a: P, b: P, r: P) => {
+    plane(e0, e1, r0, r1, 0.93);
+    plane(e2, e3, r1, r0, 0.84);
+    const gableEnd = (a: P, b: P) => {
       const length = Math.hypot(b[0] - a[0], b[1] - a[1]) * m;
-      const kind = roof === "gable" ? FACE.gable : FACE.tiledRoof;
-      const shade = roof === "gable" ? wallShade(a, b) : 0.88;
-      vertex(a, eave, 0, roof === "gable" ? eave : 0, shade, kind);
-      vertex(b, eave, length, roof === "gable" ? eave : 0, shade, kind);
-      vertex(r, ridgeZ, length / 2, roof === "gable" ? ridgeZ : slope, shade, kind);
+      const shade = wallShade(a, b);
+      vertex(a, eave, 0, eave, shade, FACE.gable);
+      vertex(b, eave, length, eave, shade, FACE.gable);
+      vertex(mid(a, b), ridgeZ, length / 2, ridgeZ, shade, FACE.gable);
     };
-    end(c1, c2, r1);
-    end(c3, c0, r0);
+    if (pitched.pull === 0) {
+      gableEnd(c1, c2);
+      gableEnd(c3, c0);
+    } else {
+      const hipEnd = (a: P, b: P, r: P) => {
+        vertex(a, lipZ, 0, 0, 0.88, FACE.tiledRoof);
+        vertex(b, lipZ, Math.hypot(b[0] - a[0], b[1] - a[1]) * m, 0, 0.88, FACE.tiledRoof);
+        vertex(r, ridgeZ, (Math.hypot(b[0] - a[0], b[1] - a[1]) * m) / 2, slope, 0.88, FACE.tiledRoof);
+      };
+      hipEnd(e1, e2, r1);
+      hipEnd(e3, e0, r0);
+      if (roof === "irimoya") {
+        // The irimoya's small gable, upright under each end of the ridge.
+        for (const [r, a, b] of [[r1, e1, e2], [r0, e3, e0]] as [P, P, P][]) {
+          const t = 0.45;
+          const pa: P = [r[0] + (a[0] - r[0]) * t, r[1] + (a[1] - r[1]) * t];
+          const pb: P = [r[0] + (b[0] - r[0]) * t, r[1] + (b[1] - r[1]) * t];
+          const z = ridgeZ - (ridgeZ - lipZ) * t;
+          vertex(pa, z, 0, z, 0.9, FACE.gable);
+          vertex(pb, z, 1, z, 0.9, FACE.gable);
+          vertex(r, ridgeZ, 0.5, ridgeZ, 0.9, FACE.gable);
+          edge(pa, z, pb, z);
+        }
+      }
+    }
+    edge(e0, lipZ, e1, lipZ);
+    edge(e1, lipZ, e2, lipZ);
+    edge(e2, lipZ, e3, lipZ);
+    edge(e3, lipZ, e0, lipZ);
     edge(r0, ridgeZ, r1, ridgeZ);
-    edge(c0, eave, r0, ridgeZ);
-    edge(c3, eave, r0, ridgeZ);
-    edge(c1, eave, r1, ridgeZ);
-    edge(c2, eave, r1, ridgeZ);
-    return { faces: new Float32Array(faces), edges: new Float32Array(edges), roof, eave, height };
+    edge(e0, lipZ, r0, ridgeZ);
+    edge(e3, lipZ, r0, ridgeZ);
+    edge(e1, lipZ, r1, ridgeZ);
+    edge(e2, lipZ, r1, ridgeZ);
+    if (landmark === "church") {
+      // A square tower at one end, rising above the ridge, under a spire.
+      const side = Math.min(short * 0.6, 8 / m);
+      const half = side / 2;
+      const end = mid(c0, c3);
+      const centre: P = [end[0] + u[0] * half, end[1] + u[1] * half];
+      const at = (su: number, sv: number): P => [centre[0] + u[0] * half * su + v[0] * half * sv, centre[1] + u[1] * half * su + v[1] * half * sv];
+      const ring = [at(-1, -1), at(1, -1), at(1, 1), at(-1, 1)];
+      const top = ridgeZ + Math.max(8, 0.3 * box.long * m);
+      const spire = top + side * m * 0.9;
+      for (let i = 0; i < 4; i += 1) {
+        const a = ring[i];
+        const b = ring[(i + 1) % 4];
+        wall(a, b, base, top, FACE.church);
+        edge(a, base, a, top);
+        edge(a, top, b, top);
+        vertex(a, top, 0, 0, 0.9, FACE.tiledRoof);
+        vertex(b, top, 1, 0, 0.9, FACE.tiledRoof);
+        vertex(centre, spire, 0.5, 1, 0.9, FACE.tiledRoof);
+        edge(a, top, centre, spire);
+      }
+    }
+    return { faces: new Float32Array(faces), edges: new Float32Array(edges), roof, eave, height, form };
   }
 
   const top = roof === "parapet" ? eave + PARAPET_M : eave;
   const ring = open(outer);
-  for (let i = 0; i < ring.length; i += 1) wall(ring[i], ring[(i + 1) % ring.length], base, top, wallKind);
+  for (let i = 0; i < ring.length; i += 1) wall(ring[i], ring[(i + 1) % ring.length], base, top, wallKind(ring[i], ring[(i + 1) % ring.length]));
   for (const hole of footprint.rings.slice(1)) {
     const inner = open(hole);
-    for (let i = 0; i < inner.length; i += 1) wall(inner[i], inner[(i + 1) % inner.length], base, top, wallKind);
+    for (let i = 0; i < inner.length; i += 1) wall(inner[i], inner[(i + 1) % inner.length], base, top, form === "mansion" ? FACE.balcony : wallKind(inner[i], inner[(i + 1) % inner.length]));
   }
   const walls = buildingEdges(footprint.rings, top, base);
   for (const value of walls) edges.push(value);
@@ -269,7 +412,6 @@ export function buildingMass(footprint: { rings: P[][]; height: number; minHeigh
       edge(a, top, b, top);
       edge(a, eave, b, eave);
     }
-    // The top of the parapet, between its outer and inner lines.
     const outerOpen = open(outer);
     for (let i = 0; i < outerOpen.length; i += 1) {
       const a = outerOpen[i];
@@ -283,8 +425,9 @@ export function buildingMass(footprint: { rings: P[][]; height: number; minHeigh
       vertex(ib, top, 0, 0, 1, FACE.flatRoof);
       vertex(ia, top, 0, 0, 1, FACE.flatRoof);
     }
-  } else flatTop(outer, top);
-  return { faces: new Float32Array(faces), edges: new Float32Array(edges), roof, eave, height };
+    if (!ctx.clipped && box.corners.length === 4 && areaM2 >= 300 && (form === "mansion" || form === "tower" || form === "institution" || (form === "block" && areaM2 >= 600))) rooftop(eave);
+  } else flatTop(outer, top, roof === "sheet" ? FACE.sheetRoof : FACE.flatRoof);
+  return { faces: new Float32Array(faces), edges: new Float32Array(edges), roof, eave, height, form };
 }
 
 /**
