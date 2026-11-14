@@ -410,3 +410,49 @@ Kyoto at zoom 16.4 and 58° tilt.
 - After teardown the real layer is empty and the view is gone. The JS heap
   hardly moves, because tile data lives outside it. Whole-browser resident
   memory was too noisy on macOS to measure the freed memory.
+
+## Round 4: the real city's ink, and two faults
+
+**S19. The first-view clock measures tile arrival, not library download.**
+On the dev server Cesium is served unbundled, and loading it alone took
+longer than 8 s, so the hand-over declined as "slow" before a single tile
+had arrived.
+- The 8 s clock now starts when the tileset is up and its tiles are on their
+  way (`tilesStarted`).
+- A separate 30 s ceiling covers a tileset that never starts at all
+  (declined as "tiles").
+- Both are tested in the reducer.
+- Measured on the dev server at 375, the hand-over now completes: 6.3–7.3 s
+  from the start of loading to the fade, library download included.
+
+**S20. Google's attribution is whole on a phone.**
+- Cesium writes an inline `bottom` offset on its credit box, which beat our
+  CSS. The box was left at 3 px and its second line sat under OpenStreetMap's
+  credit.
+- It is now lifted by a margin, as Atlas does. An e2e test with Cesium's
+  inline offset reproduces the fault and guards it.
+- The page's keys sit above both credits.
+- "Cesium ion" logo: the only request to Cesium's servers is
+  `assets.ion.cesium.com/google-credit.png`, the Google logo image that
+  Cesium hosts. No ion data service (terrain, imagery, tiles) is used.
+  Cesium's terms tie the logo to its Licensed Services. CesiumJS shows its
+  logo by default, and the asset request goes to ion's host, so the logo is
+  kept until Cesium confirms it may go.
+
+**S21. Line quality.**
+- The real city is now rendered at the screen's pixel density (up to 2x),
+  with FXAA after the sketch pass.
+- An outline needs both a jump and a bend in depth, so slopes and lumps draw
+  nothing.
+- Creases compare wide-kernel normals; photo detail is faint and close by
+  only.
+- Surfaces are shaded like the drawn city: paper roofs, walls a shade darker.
+- *Tried and dropped:* draping OpenStreetMap's building outlines onto
+  Google's geometry as ruled ink (`GroundPolylinePrimitive` classified onto
+  the 3D tiles). Classification paints every surface inside the line's
+  volume, walls included, so the outlines came out as black smears
+  (`sketch-r4-hybrid-try-375.png`).
+- *Verdict:* close in, the real city now reads as real shapes in ink. But its
+  lines follow Google's photogrammetry mesh: cars and trees become blobs,
+  walls wobble, and middle-distance lines are faint. It does not reach the
+  drawn city's ruled look. The ceiling is the mesh.

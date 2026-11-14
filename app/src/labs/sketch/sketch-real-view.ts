@@ -38,6 +38,8 @@ export interface RealSketchOptions {
   ink: [number, number, number];
   /** Coarser on a phone: fewer, lighter tiles and a quicker first view. */
   maximumScreenSpaceError: number;
+  /** The tileset is up and its tiles are on their way: the first-view clock starts here. */
+  onTilesStarted: () => void;
   onFirstView: () => void;
   onFailed: () => void;
 }
@@ -81,7 +83,12 @@ export const createRealSketchView: RealSketchFactory = (options) => {
     // Only draw when told: MapLibre moves, this follows.
     requestRenderMode: true,
     maximumRenderTimeChange: Infinity,
+    // Drawn at the screen's own pixel density, up to 2x, so lines are fine, not stepped.
+    useBrowserRecommendedResolution: false,
   });
+  viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 2) / (window.devicePixelRatio || 1);
+  // Smooths the drawn lines' edges after the sketch pass.
+  viewer.scene.postProcessStages.fxaa.enabled = true;
   viewer.scene.globe.show = false;
   if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
   if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
@@ -141,6 +148,7 @@ export const createRealSketchView: RealSketchFactory = (options) => {
       }
       tileset = loaded;
       viewer.scene.primitives.add(loaded);
+      options.onTilesStarted();
       // The first view counts as drawn once nearly every tile it asked for
       // has come and none is still being processed: the last few, far
       // towards the horizon, fill in under the fade.

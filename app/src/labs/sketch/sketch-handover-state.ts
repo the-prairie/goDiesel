@@ -3,7 +3,10 @@
  * real city (Google's Photorealistic 3D Tiles drawn as a sketch), as plan
  * decision S17 sets out. Zooming into a covered city on a capable device
  * loads the real city while the drawn one stays on screen; once its first
- * view is drawn it fades in. Too slow (about 8 s) or failing, it is declined
+ * view is drawn it fades in. The first view is timed from the tiles' first
+ * arrival, not from downloading the 3D library (which on an unbundled dev
+ * server alone can take longer than the limit). Too slow (about 8 s after
+ * the tiles start), never starting at all, or failing, it is declined
  * and the drawn city stays; a declined city is tried again only after the
  * camera has left it. Zooming out below the exit zoom fades it out and tears
  * it down. Enter and exit zooms differ, so it never flickers at the edge.
@@ -12,8 +15,10 @@
 
 export const ENTER_ZOOM = 14.5;
 export const EXIT_ZOOM = 14;
-/** How long the real city's first view may take before the drawn one is kept. */
+/** How long the real city's first view may take, once its tiles start, before the drawn one is kept. */
 export const FIRST_VIEW_TIMEOUT_MS = 8000;
+/** How long the library and the tileset may take to start sending tiles at all. */
+export const START_TIMEOUT_MS = 30000;
 
 export type DeclineReason = "no-coverage" | "no-webgl2" | "low-memory" | "save-data" | "slow" | "tiles";
 
@@ -29,7 +34,7 @@ export function eligibility({ city, webgl2, deviceMemoryGb, saveData }: { city: 
 
 export type HandoverState =
   | { phase: "drawn"; lastLoadId?: number }
-  | { phase: "loading"; loadId: number; city: string; startedMs: number }
+  | { phase: "loading"; loadId: number; city: string; startedMs: number; tilesStartedMs?: number }
   | { phase: "fadingIn"; loadId: number; city: string }
   | { phase: "real"; loadId: number; city: string }
   | { phase: "fadingOut"; loadId: number }
@@ -38,7 +43,9 @@ export type HandoverState =
 export type HandoverEvent =
   | { type: "zoomChanged"; zoom: number; eligible: Eligibility; nowMs: number }
   | { type: "firstViewDrawn"; loadId: number }
+  | { type: "tilesStarted"; loadId: number; nowMs: number }
   | { type: "timedOut"; loadId: number }
+  | { type: "startTimedOut"; loadId: number }
   | { type: "failed"; loadId: number }
   | { type: "fadeFinished"; loadId: number };
 
@@ -72,8 +79,12 @@ export function reduceHandover(state: HandoverState, event: HandoverEvent): Hand
   switch (event.type) {
     case "firstViewDrawn":
       return state.phase === "loading" ? { phase: "fadingIn", loadId: state.loadId, city: state.city } : state;
+    case "tilesStarted":
+      return state.phase === "loading" && state.tilesStartedMs === undefined ? { ...state, tilesStartedMs: event.nowMs } : state;
     case "timedOut":
-      return state.phase === "loading" ? { phase: "declined", reason: "slow", lastLoadId: state.loadId } : state;
+      return state.phase === "loading" && state.tilesStartedMs !== undefined ? { phase: "declined", reason: "slow", lastLoadId: state.loadId } : state;
+    case "startTimedOut":
+      return state.phase === "loading" && state.tilesStartedMs === undefined ? { phase: "declined", reason: "tiles", lastLoadId: state.loadId } : state;
     case "failed":
       return state.phase === "loading" || state.phase === "fadingIn" || state.phase === "real" ? { phase: "declined", reason: "tiles", lastLoadId: state.loadId } : state;
     case "fadeFinished":

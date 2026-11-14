@@ -60,10 +60,14 @@
 }
 
 /* Google's logo and data line, unstyled and uncovered, sit just above
-   OpenStreetMap's credit. Only the band behind them is ours: Cesium draws
-   Google's logo light, for a photograph, and on paper it would vanish. */
-.sketch-real-layer .cesium-viewer-bottom {
-  bottom: var(--sk-credit, 24px);
+   OpenStreetMap's credit. Cesium writes its own inline bottom offset on this
+   box, so the lift is a margin on top of it (as Atlas does). Only the band
+   behind them is ours: Cesium draws Google's logo light, for a photograph,
+   and on paper it would vanish. */
+.sketch .sketch-real-layer .cesium-viewer-bottom {
+  margin-bottom: var(--sk-credit, 24px);
+  width: fit-content;
+  max-width: calc(100% - 10px);
   background: rgba(20, 20, 22, 0.78);
   border-radius: 3px;
   padding: 2px 6px;

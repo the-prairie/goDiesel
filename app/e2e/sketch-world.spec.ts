@@ -150,13 +150,29 @@ async function fakeRealCity(page: Page, { firstView = true }: { firstView?: bool
   await page.addInitScript((reportFirstView) => {
     window.__realLog = { created: 0, destroyed: 0, cameras: 0, floods: [], firstView: reportFirstView };
     window.__GODIESEL_SKETCH_HANDOVER_TIMEOUT_MS__ = 1500;
-    (window as unknown as { __GODIESEL_SKETCH_REAL_FACTORY__: unknown }).__GODIESEL_SKETCH_REAL_FACTORY__ = (options: { container: HTMLElement; onFirstView: () => void }) => {
+    (window as unknown as { __GODIESEL_SKETCH_REAL_FACTORY__: unknown }).__GODIESEL_SKETCH_REAL_FACTORY__ = (options: { container: HTMLElement; onFirstView: () => void; onTilesStarted: () => void }) => {
       const log = window.__realLog!;
       log.created += 1;
       const div = document.createElement("div");
       div.dataset.testid = "sketch-real-fake";
       div.style.cssText = "position:absolute;inset:0;background:#e8e2d0";
       options.container.append(div);
+      // Google's credit, as Cesium lays it out: a logo container and a two-line data line.
+      const credits = document.createElement("div");
+      credits.className = "cesium-viewer-bottom";
+      // Cesium writes its own inline bottom offset on this box.
+      credits.style.bottom = "3px";
+      credits.dataset.testid = "sketch-real-credit";
+      // Cesium's own stylesheet, which arrives with its lazy chunk after ours.
+      if (!document.getElementById("fake-cesium-css")) {
+        const css = document.createElement("style");
+        css.id = "fake-cesium-css";
+        css.textContent = ".cesium-viewer-bottom { display: block; position: absolute; bottom: 0; left: 0; padding-right: 5px; }";
+        document.head.append(css);
+      }
+      credits.innerHTML = '<div class="cesium-credit-logoContainer"><span>Cesium ion</span></div><div class="cesium-widget-credits"><span>Google Maps · Google · Airbus · Data SIO, NOAA, U.S. Navy, NGA, GEBCO · Landsat / Copernicus · IBCAO</span></div>';
+      div.append(credits);
+      setTimeout(() => options.onTilesStarted(), 50);
       if (log.firstView) setTimeout(() => options.onFirstView(), 200);
       return {
         setCamera: () => (log.cameras += 1),
@@ -238,4 +254,25 @@ test("jumping from the real city floods colour on the same geometry before the 3
   const floods = await page.evaluate(() => window.__realLog!.floods);
   expect(Math.max(...floods)).toBe(1);
   expect(floods.some((value) => value > 0 && value < 1)).toBe(true);
+});
+
+test("on a phone, Google's two-line credit sits whole above OpenStreetMap's, with nothing over it", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fakeRealCity(page);
+  await stubTiles(page);
+  await page.goto("/#/lab/sketch");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  await zoomTo(page, 16.5);
+  await expect(handover(page)).toHaveAttribute("data-handover", "real", { timeout: 10_000 });
+  const google = (await page.getByTestId("sketch-real-credit").boundingBox())!;
+  const osm = (await page.locator(".maplibregl-ctrl-attrib").boundingBox())!;
+  const routes = (await page.getByTestId("sketch-routes").boundingBox())!;
+  const overlaps = (a: typeof google, b: typeof google) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  expect(google.height).toBeGreaterThan(20);
+  expect(google.y).toBeGreaterThanOrEqual(0);
+  expect(google.y + google.height).toBeLessThanOrEqual(osm.y + 0.5);
+  expect(overlaps(google, routes)).toBe(false);
+  // Its whole text is inside its own box: nothing cut off below.
+  const clipped = await page.getByTestId("sketch-real-credit").evaluate((element) => element.scrollHeight > element.clientHeight + 1);
+  expect(clipped).toBe(false);
 });

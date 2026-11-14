@@ -91,6 +91,7 @@ export function SketchRealPage() {
         paper: [0.984, 0.984, 0.973],
         ink: [0.114, 0.114, 0.122],
         maximumScreenSpaceError: container.clientWidth < 768 ? 24 : 16,
+        onTilesStarted: () => undefined,
         onFirstView: () => {
           firstCompleteMs = Math.round(performance.now() - started);
           setStatus("");

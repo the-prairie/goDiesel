@@ -49,8 +49,23 @@ describe("reduceHandover", () => {
     expect(run([{ type: "fadeFinished", loadId: 1 }], fading)).toEqual({ phase: "real", loadId: 1, city: "Kyoto, Japan" });
   });
 
+  it("times the first view from the tiles' first arrival, not from the library's download", () => {
+    // A slow library download (an unbundled dev server) is not a slow first view.
+    const loading = run([into()]);
+    expect(run([{ type: "timedOut", loadId: 1 }], loading)).toBe(loading);
+    const started = run([{ type: "tilesStarted", loadId: 1, nowMs: 5000 }], loading);
+    expect(started).toMatchObject({ phase: "loading", tilesStartedMs: 5000 });
+    expect(run([{ type: "timedOut", loadId: 1 }], started)).toMatchObject({ phase: "declined", reason: "slow" });
+  });
+
+  it("still gives up if the tiles never start at all", () => {
+    expect(run([into(), { type: "startTimedOut", loadId: 1 }])).toMatchObject({ phase: "declined", reason: "tiles" });
+    const started = run([into(), { type: "tilesStarted", loadId: 1, nowMs: 5000 }]);
+    expect(run([{ type: "startTimedOut", loadId: 1 }], started)).toBe(started);
+  });
+
   it("falls back to the drawn city, and stays, when the first view is too slow or the tiles fail", () => {
-    expect(run([into(), { type: "timedOut", loadId: 1 }])).toMatchObject({ phase: "declined", reason: "slow" });
+    expect(run([into(), { type: "tilesStarted", loadId: 1, nowMs: 1 }, { type: "timedOut", loadId: 1 }])).toMatchObject({ phase: "declined", reason: "slow" });
     expect(run([into(), { type: "failed", loadId: 1 }])).toMatchObject({ phase: "declined", reason: "tiles" });
     // Declined, zooming about does not try again until the camera has left the city.
     const declined = run([into(), { type: "failed", loadId: 1 }]);
@@ -75,7 +90,7 @@ describe("reduceHandover", () => {
   });
 
   it("lets a declined city be tried again once the camera has left it", () => {
-    const declined = run([into(), { type: "timedOut", loadId: 1 }]);
+    const declined = run([into(), { type: "tilesStarted", loadId: 1, nowMs: 1 }, { type: "timedOut", loadId: 1 }]);
     expect(run([out(), into()], declined)).toEqual({ phase: "loading", loadId: 2, city: "Kyoto, Japan", startedMs: 1000 });
   });
 

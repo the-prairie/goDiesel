@@ -9,7 +9,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 
 import { coverageAt } from "@/data/photoreal-coverage";
 import { matchCamera } from "@/labs/sketch/sketch-camera-match";
-import { FIRST_VIEW_TIMEOUT_MS, eligibility, initialHandoverState, reduceHandover, type HandoverEvent } from "@/labs/sketch/sketch-handover-state";
+import { FIRST_VIEW_TIMEOUT_MS, START_TIMEOUT_MS, eligibility, initialHandoverState, reduceHandover, type HandoverEvent } from "@/labs/sketch/sketch-handover-state";
 import type { SketchLook } from "@/labs/sketch/sketch-options";
 import type { RealSketchFactory, RealSketchView } from "@/labs/sketch/sketch-real-view";
 import { REVEAL_RADIUS_M, type ExploredRoute, type RevealMode } from "@/labs/sketch/sketch-reveal";
@@ -121,7 +121,9 @@ export function useSketchHandover({
     if (state.phase !== "loading") return;
     const id = state.loadId;
     let active = true;
-    const timeout = window.setTimeout(() => send({ type: "timedOut", loadId: id }), window.__GODIESEL_SKETCH_HANDOVER_TIMEOUT_MS__ ?? FIRST_VIEW_TIMEOUT_MS);
+    // The library may take its time (an unbundled dev server); only a tileset
+    // that never starts at all gives up here. The first view has its own clock.
+    const timeout = window.setTimeout(() => send({ type: "startTimedOut", loadId: id }), START_TIMEOUT_MS);
     void loadFactory()
       .then((factory) => {
         const container = layerRef.current;
@@ -142,6 +144,7 @@ export function useSketchHandover({
           // A sketch needs less detail than a photograph: coarser tiles come
           // sooner and weigh less (measured: 16 missed the 8 s first view at 1440).
           maximumScreenSpaceError: 24,
+          onTilesStarted: () => send({ type: "tilesStarted", loadId: id, nowMs: performance.now() }),
           onFirstView: () => send({ type: "firstViewDrawn", loadId: id }),
           onFailed: () => send({ type: "failed", loadId: id }),
         });
@@ -156,6 +159,15 @@ export function useSketchHandover({
     };
     // A load is started once per load id; options reach the view through the effects below.
   }, [loadId, state.phase === "loading"]);
+
+  // The first view's clock runs from the tiles' arrival (S17: tiles, not library).
+  const tilesStarted = state.phase === "loading" && state.tilesStartedMs !== undefined;
+  useEffect(() => {
+    if (!tilesStarted) return;
+    const id = loadId;
+    const timer = window.setTimeout(() => send({ type: "timedOut", loadId: id }), window.__GODIESEL_SKETCH_HANDOVER_TIMEOUT_MS__ ?? FIRST_VIEW_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [loadId, send, tilesStarted]);
 
   // Fades end on a clock, not on a CSS event a hidden tab may never send.
   useEffect(() => {
