@@ -560,7 +560,7 @@ export function createEdgeLayer({
   /** Starts on exactly the tiles a camera that is not there yet will draw (the jump's landing). */
   const prefetchView = (camera: ViewCamera) => request(tilesForView(camera, TILE_ZOOM, maxTiles));
 
-  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; prefetchView(camera: ViewCamera): void; stats(): EdgeStats; roofUnder(lng: number, lat: number): { top: number; west: number; east: number; south: number; north: number } | null } = {
+  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; prefetchView(camera: ViewCamera): void; stats(): EdgeStats; roofUnder(lng: number, lat: number): { top: number; west: number; east: number; south: number; north: number } | null; tileMade(lng: number, lat: number): boolean } = {
     id: "building-edges",
     type: "custom",
     renderingMode: "3d",
@@ -714,6 +714,12 @@ export function createEdgeLayer({
       map?.triggerRepaint();
     },
     prefetchView,
+    /** Whether the buildings round a place are made yet (no roof there may just mean open ground). */
+    tileMade(lng: number, lat: number) {
+      const n = 2 ** TILE_ZOOM;
+      const s = Math.sin((lat * Math.PI) / 180);
+      return tops.has(tileKey(Math.floor(((lng + 180) / 360) * n), Math.floor((0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n)));
+    },
     /** The drawn roof at a place, once its tile is made: its height in metres and its box. */
     roofUnder(lng: number, lat: number) {
       const n = 2 ** TILE_ZOOM;

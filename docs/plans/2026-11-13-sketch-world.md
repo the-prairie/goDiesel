@@ -1101,3 +1101,36 @@ Bundles:
   laptop message), the marker, the hand-over with her clip, and Back all
   worked. Two fixes: the readout stops clear of the map keys, and a tap on
   a building's raised side at a steep camera picks that building.
+
+## Round 15: the real track, and a Street view she can see
+
+**S35. Route lines follow her real track; Street does not face a wall.**
+- *Lines from tracks.* Once a place's full tracks load, its route lines,
+  the corridor's ground and the reveal points are all drawn from them
+  (`withTracks`), so the line and the coloured strip agree. The summary
+  stands in until then, and at world and country zoom.
+  - The edge layer draws a tile answered for the previous reveal and asks
+    again, rather than dropping it: dropping left the dive's landing empty.
+  - Simulator Safari, 10 s entering Crete (8 routes): mean frame 16.6 /
+    16.7 ms after vs 16.8 / 16.6 before; worst 28 / 33 vs 72 / 33 ms.
+- *Street* (`streetCamera`, pure, tested). The view it always had (low at
+  the route's start, looking along it) wherever that is open.
+  - Where a building blocks the middle line of sight to the ground she
+    looks at, or stands right beside the eye, it goes further along the
+    first stretch, then higher.
+  - The heights are the drawn buildings' tops, waited for (at most 2.5 s)
+    once Street is tapped.
+  - Side lines only look near the eye. In an ordinary street they meet the
+    buildings that line it, which is what a street looks like.
+- *Swept across all 29 places' first routes and checked by eye.* Every
+  frame shows the route ahead; none is a wall in her face.
+  - Ordinary streets keep the old view (Kyoto, Tokyo, Vancouver, Veneto,
+    Banff, Calgary).
+  - Blocked starts move along or rise: London, New York and Los Angeles
+    are at street level further along; Rome, Madrid and the Costa Brava
+    are higher.
+  - The automated measure (the share of a 9 × 15 grid on one MapLibre
+    building whose footprint does not hold the ground point) proved
+    unreliable. Identical cameras scored 0.01 and 0.38 on different runs,
+    and on a tilted view any building low in the frame counts. Its numbers
+    are reported, not used as the judge.

@@ -15,7 +15,8 @@ import { OverlandJump, type TownJumpCover } from "@/labs/overland/overland-jump"
 import { initialOverlandJumpState, townCover, type TownCover } from "@/labs/overland/overland-jump-state";
 import { usePhone } from "@/labs/overland/overland-ui";
 import { applySketchStyle } from "@/labs/sketch/sketch-apply";
-import { cityView, regionView, routeStartView, streetView, type SketchCamera } from "@/labs/sketch/sketch-camera";
+import { cityView, regionView, routeStartView, type SketchCamera } from "@/labs/sketch/sketch-camera";
+import { streetCamera } from "@/labs/sketch/sketch-street-camera";
 import { atlasFromRoute, crumbsOf, initialAtlasState, reduceAtlas, type AtlasState } from "@/labs/sketch/sketch-atlas-state";
 import { groupPlaces, placeOf } from "@/labs/sketch/sketch-places";
 import { createEdgeLayer } from "@/labs/sketch/sketch-edge-layer";
@@ -437,10 +438,25 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     if (row && current) row.scrollLeft = current.offsetLeft + current.offsetWidth - row.clientWidth + 2;
     if (row) row.dataset.scrolled = String(row.scrollLeft > 0);
   }, [atlas]);
+  /**
+   * Where Street stands for a route: chosen once the drawn buildings round its
+   * start are made (asked for now, waited on at most 2.5 s), so she does not
+   * land with her face against a wall.
+   */
+  const streetFor = async (line: readonly [number, number][]) => {
+    const edges = edgesRef.current;
+    const height = mapRef.current?.getCanvas().clientHeight ?? window.innerHeight;
+    if (!edges) return streetCamera(line, () => 0, { height });
+    const first = streetCamera(line, () => 0, { height });
+    edges.prefetchView({ ...first, fovDeg: MAPLIBRE_FOV_DEG, height });
+    const until = performance.now() + 2500;
+    while (!edges.tileMade(first.center[0], first.center[1]) && performance.now() < until) await new Promise((resolve) => setTimeout(resolve, 100));
+    return streetCamera(line, (lng, lat) => edges.roofUnder(lng, lat)?.top ?? 0, { height });
+  };
   const goTo = (level: "world" | "country" | "place" | "street") => {
     if (level === "street") {
-      const line = chosen ? lineOf(chosen) : undefined;
-      if (line) void move(streetView(line), 2400);
+      const line = chosen ? (exploredRef.current.find((route) => route.slug === chosen)?.line ?? lineOf(chosen)) : undefined;
+      if (line) void streetFor(line).then((camera) => move(camera, 2400));
       return;
     }
     if (level !== "place" || (atlas.phase === "place" && atlas.route)) setParam("route", null);
