@@ -57,6 +57,20 @@ const lineOf = (slug: string) => EXPLORED.find((route) => route.slug === slug)?.
 const revealFor = (mode: RevealMode) => ({ lines: EXPLORED.map((route) => route.line), radiusM: REVEAL_RADIUS_M[mode], fade: mode === "wash" });
 
 /** The pose the 3D replay opens with, read from the same functions its driver uses. */
+/**
+ * Where the jump's dive lands for a route: the drawn city's camera matched to
+ * where Google's replay opens (S23), or the route's start if its detail is
+ * missing. Used by the dive and, earlier, to make the landing's buildings.
+ */
+async function landingCamera(slug: string, height: number) {
+  const line = lineOf(slug);
+  if (!line) return undefined;
+  const detail = await loadRouteDetail(slug);
+  return detail.status === "ready" && detail.route.route.length > 1
+    ? mapCameraForReplay(openingPose(detail.route, window.innerWidth), { height })
+    : { ...routeStartView(line), fovDeg: MAPLIBRE_FOV_DEG };
+}
+
 function openingPose(route: QuestRoute, viewportWidth: number) {
   const state = initialGoogleRouteNavigatorState();
   return sustainedRouteCamera(route, state, googleRouteCameraPose(route, state), viewportWidth);
@@ -113,9 +127,23 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
   // Wait 2 (S24): choosing a route warms Google's 3D renderer code, so the
   // dive overlaps it and the 3D tiles can start as soon as the jump mounts.
   const mapUp = state.phase === "ready" || state.phase === "degraded";
+  // Round 8 (S27): making a tile's buildings takes 0.4–1.7 s each in Safari,
+  // one at a time, so on choosing a route the landing's tiles are made then,
+  // not on Jump in. About six building tiles, once per route; none with
+  // Save-Data or reduced data, when the dive still asks for them as it starts.
   useEffect(() => {
     const key = googleWarmKey();
-    if (shouldWarmGoogle({ chosen, realmOpen: Boolean(realmSlug), mapReady: mapUp, hasKey: Boolean(key), ...readDataSaving() })) void warmGoogle(key);
+    const saving = readDataSaving();
+    if (shouldWarmGoogle({ chosen, realmOpen: Boolean(realmSlug), mapReady: mapUp, hasKey: Boolean(key), ...saving })) void warmGoogle(key);
+    const map = mapRef.current;
+    if (!chosen || realmSlug || !mapUp || !map || saving.saveData || saving.reducedData) return;
+    let cancelled = false;
+    void landingCamera(chosen, map.getCanvas().clientHeight).then((target) => {
+      if (!cancelled && target) edgesRef.current?.prefetchView({ ...target, height: map.getCanvas().clientHeight });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [chosen, realmSlug, mapUp]);
   const handoverRef = useRef(handover);
   handoverRef.current = handover;
@@ -191,6 +219,8 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           tilesUrl,
           look: sketchOptions(new URLSearchParams(window.location.hash.split("?")[1] ?? "")).look,
           maxTiles: phone ? 6 : 12,
+          // A tile that arrives on screen rises into place over 700 ms, never pops.
+          riseMs: () => (reducedRef.current ? 0 : 700),
           onExplored: (ids) => {
             for (const { layer, id, level } of ids) map.setFeatureState({ source: "openmaptiles", sourceLayer: layer, id }, { explored: level });
           },
@@ -219,11 +249,10 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     let firstTile = true;
     map.on("data", (event) => {
       const data = event as { dataType?: string; sourceId?: string; tile?: unknown };
-      if (firstTile && data.dataType === "source" && data.sourceId === "openmaptiles" && data.tile) {
-        firstTile = false;
-        performance.mark("sketch:first-tile");
-      }
-      if (data.dataType === "source" && data.sourceId === "openmaptiles" && data.tile) dispatch({ type: "tilesLoaded", loadId });
+      if (data.dataType !== "source" || data.sourceId !== "openmaptiles" || !data.tile) return;
+      if (firstTile) performance.mark("sketch:first-tile");
+      firstTile = false;
+      dispatch({ type: "tilesLoaded", loadId });
     });
     // Everything at the bottom sits above the credit, however many lines it takes.
     const credit = host.querySelector(".maplibregl-ctrl-bottom-right");
@@ -379,17 +408,12 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
   const jumpCover: TownJumpCover = useMemo(
     () => ({
       dive: async () => {
-        const line = realmSlug ? lineOf(realmSlug) : undefined;
         const map = mapRef.current;
-        if (!line || !map || !realmSlug) return;
-        const detail = await loadRouteDetail(realmSlug);
-        const canvas = map.getCanvas();
-        const target =
-          detail.status === "ready" && detail.route.route.length > 1
-            ? mapCameraForReplay(openingPose(detail.route, window.innerWidth), { height: canvas.clientHeight })
-            : { ...routeStartView(line), fovDeg: MAPLIBRE_FOV_DEG };
+        if (!map || !realmSlug) return;
+        const target = await landingCamera(realmSlug, map.getCanvas().clientHeight);
+        if (!target) return;
         (window as Window & { __sketchJumpCamera?: unknown }).__sketchJumpCamera = target;
-        edgesRef.current?.prefetch(target.center[0], target.center[1]);
+        edgesRef.current?.prefetchView({ ...target, height: map.getCanvas().clientHeight });
         const flying = fly(target, 2800);
         if (!handoverRef.current.real) return flying;
         return Promise.all([flying, handoverRef.current.flood(0, 1, 2800)]).then(() => undefined);

@@ -155,6 +155,35 @@ test("if the map's library cannot load, the page says so plainly and still lists
   await expect(page.getByTestId("sketch-routes").getByRole("button").first()).toContainText(GOLD.title);
 });
 
+test("the drawn buildings round the landing are on the paper when the dive lands, even when making them is slow", async ({ page }) => {
+  test.setTimeout(90_000);
+  await installGoogleReplay(page, "loading");
+  await stubTiles(page);
+  // The building tiles (zoom 14) take 4 s each to come: slower than the dive.
+  await page.route(/\/stub\/14\/\d+\/\d+\.pbf$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    await route.fulfill({ status: 204 });
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(`/#/lab/sketch?route=${GOLD.slug}`);
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  // A viewer reads the route before jumping in.
+  await page.waitForTimeout(6000);
+  await page.getByTestId("sketch-jump").click();
+  const atLanding = await page.waitForFunction(
+    () => {
+      if (document.querySelector("[data-jump-phase]")?.getAttribute("data-jump-phase") !== "holding") return null;
+      const stats = (window as unknown as { __sketch: { edges(): { wanted: number; drawn: number } } }).__sketch.edges();
+      return stats;
+    },
+    null,
+    { timeout: 30_000, polling: "raf" },
+  );
+  const stats = (await atLanding.jsonValue()) as { wanted: number; drawn: number };
+  expect(stats.wanted).toBeGreaterThan(0);
+  expect(stats.drawn).toBe(stats.wanted);
+});
+
 test("choosing a route and jumping in hands over to the 3D replay; Back returns to the sketch at that route", async ({ page }) => {
   test.setTimeout(90_000);
   await installGoogleReplay(page, "ready");

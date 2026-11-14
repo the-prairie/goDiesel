@@ -591,3 +591,50 @@ Unthrottled (5 runs each), idle: before 0.81–1.24 s (median 0.94 s), after
   held for a decision. A throwaway build with a Kyoto-only copy (never
   committed) measured: routes listed 2.2 s, map created 3.7–3.8 s, first
   tile 7.1–7.4 s, idle 8.0–8.2 s.
+
+## Round 8: the drawn buildings at the dive's landing, in Safari
+
+Measured in the booted iPhone 17 simulator's Safari (402×714 CSS px, DPR 3)
+and in the bundled Chromium at 375×812. A scratch proxy in front of the
+server injected a measuring script, which:
+
+- turned the Google warm-up off with its probe;
+- stood in a never-ready Google engine, so the jump stayed over the drawn city;
+- pressed Jump in, then sampled the edge layer's new `wanted` / `drawn`
+  counts (the tiles the current view draws buildings from, and how many of
+  those are on the GPU) and per-tile times.
+
+**Cause.** Not the network and not a cold server: it reproduced on a
+production build. Making a building tile is CPU work in one worker, one tile
+at a time: about 0.5 s a tile in Chromium, 0.4–1.7 s in simulator Safari (a
+tile's fetch waited on the previous tile's work). The dive asked for its
+tiles only on Jump in, and for the wrong ones. It took the tiles round the
+landing's centre, but a tilted view draws from the ground at the foot of the
+screen, so about 3 of 9 tiles made were never drawn, and 3 the landing
+needed were asked for mid-dive. In Chromium that left 2 of 6 drawn at
+landing; in Safari, 0 of 6.
+
+**S27. Make the landing's buildings when the route is chosen; let late ones rise.**
+- The tiles for a camera not there yet come from the ground at its foot
+  (`groundAtFoot`, `tilesForView`), so exactly the landing's tiles are made.
+- Choosing a route (once the drawing is up) makes them then, about six tiles
+  once per route. They are skipped with Save-Data or reduced data, when the
+  dive still asks for them as it starts.
+- A tile that arrives while on screen rises from the ground over 700 ms
+  (eased); with reduced motion it is simply there. Nearest tiles are made
+  first, so a landing that beats them still has its foreground drawn.
+
+| First jump: buildings drawn at landing / all drawn after Jump in | Before | After, 2 s or 8 s after the map is up | After, jumping 0.3 s after |
+|---|---|---|---|
+| Safari, production | 0 of 6 / 7.0 s (2 runs: 7.0, 7.0) | all at landing (2.97, 3.00 s) | 2 of 6 / 5.9 s |
+| Safari, 8790 | 0 of 6 / 5.4 s | all at landing (2.95–3.26 s) | not measured |
+| Chromium, production | 2 of 6 / 5.2 s | all at landing (2.86, 2.91 s) | all at landing (2.89 s) |
+| Chromium, 8790 | 3.5 s | all at landing (2.92, 2.92 s) | not measured |
+
+With Save-Data (dive-time prefetch only, now of the right tiles): Safari
+4.2–5.1 s, Chromium 2.9–3.9 s. A second jump was always instant: the tiles
+are still in the layer.
+
+The sketch world's code is now 76.0 of its 76 KiB budget (12 bytes to spare):
+to fit, the per-tile timing used to find the cause was taken out again, and
+the layer's tile maths shares one Web Mercator helper.

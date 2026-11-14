@@ -16,7 +16,7 @@ import { BUILDING_COLOURS } from "@/labs/sketch/sketch-faces";
 import { PACKED_BYTES } from "@/labs/sketch/sketch-massing";
 import type { ExploredId } from "@/labs/sketch/sketch-tile";
 import { routeOnGround } from "@/labs/sketch/sketch-route-ground";
-import { tilesToDraw } from "@/labs/sketch/sketch-tiles";
+import { riseAt, tilesForView, tilesToDraw, toTile, type ViewCamera } from "@/labs/sketch/sketch-tiles";
 import type { SketchLook } from "@/labs/sketch/sketch-options";
 
 /** Building tiles are made at zoom 14 and drawn larger from there. */
@@ -222,6 +222,8 @@ interface TileDrawing {
   faceVao: WebGLVertexArrayObject;
   faceBuffer: WebGLBuffer;
   usedAt: number;
+  /** When it was first drawn, for its rise. */
+  bornAt: number;
 }
 
 export interface EdgeStats {
@@ -229,8 +231,10 @@ export interface EdgeStats {
   segments: number;
   pending: number;
   explored: number;
-  revealedTiles: number;
   triangles: number;
+  /** Tiles the current view draws buildings from, and how many of those are on the GPU. */
+  wanted: number;
+  drawn: number;
 }
 
 function multiply(a: ArrayLike<number>, b: ArrayLike<number>): Float64Array {
@@ -265,11 +269,14 @@ export function createEdgeLayer({
   tilesUrl,
   look,
   maxTiles,
+  riseMs,
   onExplored,
 }: {
   tilesUrl: string;
   look: SketchLook;
   maxTiles: number;
+  /** How long a newly drawn tile's buildings take to rise from the ground; 0 with reduced motion. */
+  riseMs: () => number;
   /** Water and parks near her routes, found in a tile, for the map to colour. */
   onExplored: (ids: ExploredId[]) => void;
 }) {
@@ -300,16 +307,11 @@ export function createEdgeLayer({
 
   const want = () => {
     if (!map || !worker || map.getZoom() < TILE_MIN_ZOOM) return [];
-    const n = 2 ** TILE_ZOOM;
     const center = map.getCenter();
-    const sin = Math.sin((center.lat * Math.PI) / 180);
-    const middle: [number, number] = [((center.lng + 180) / 360) * n, (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * n];
     // The ground at the foot of the screen: where the nearest buildings stand.
     const canvas = map.getCanvas();
     const foot = map.unproject([canvas.clientWidth / 2, canvas.clientHeight]);
-    const footSin = Math.sin((foot.lat * Math.PI) / 180);
-    const camera: [number, number] = [((foot.lng + 180) / 360) * n, (0.5 - Math.log((1 + footSin) / (1 - footSin)) / (4 * Math.PI)) * n];
-    return tilesToDraw({ camera, center: middle, maxTiles });
+    return tilesToDraw({ camera: toTile(foot.lng, foot.lat, TILE_ZOOM), center: toTile(center.lng, center.lat, TILE_ZOOM), maxTiles });
   };
 
   const request = (wanted: { x: number; y: number }[] = want()) => {
@@ -414,6 +416,8 @@ export function createEdgeLayer({
         faceVao,
         faceBuffer,
         usedAt: performance.now(),
+        // A tile made again (a new reveal) is already standing.
+        bornAt: old ? old.bornAt : performance.now(),
       });
     }
     if (routeDirty) {
@@ -458,15 +462,10 @@ export function createEdgeLayer({
 
   const onMove = () => request();
 
-  /** Starts on the tiles round a place the camera is about to reach (the jump's dive). */
-  const prefetch = (lng: number, lat: number) => {
-    const n = 2 ** TILE_ZOOM;
-    const sin = Math.sin((lat * Math.PI) / 180);
-    const point: [number, number] = [((lng + 180) / 360) * n, (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * n];
-    request(tilesToDraw({ camera: point, center: point, maxTiles }));
-  };
+  /** Starts on exactly the tiles a camera that is not there yet will draw (the jump's landing). */
+  const prefetchView = (camera: ViewCamera) => request(tilesForView(camera, TILE_ZOOM, maxTiles));
 
-  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; prefetch(lng: number, lat: number): void; stats(): EdgeStats } = {
+  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; prefetchView(camera: ViewCamera): void; stats(): EdgeStats } = {
     id: "building-edges",
     type: "custom",
     renderingMode: "3d",
@@ -521,17 +520,24 @@ export function createEdgeLayer({
       const ratio = window.devicePixelRatio || 1;
       const now = performance.now();
       const visible = new Set(want().map(({ x, y }) => tileKey(x, y)));
-      const matrixFor = (key: string, extent: number) => {
+      const matrixFor = (key: string, extent: number, rise = 1) => {
         const [z, x, y] = key.split("/").map(Number);
         const n = 2 ** z;
         const lat = (Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 0.5)) / n))) * 180) / Math.PI;
         const metre = 1 / (40075016.686 * Math.cos((lat * Math.PI) / 180));
         const unit = 1 / (n * extent);
-        const model = [unit, 0, 0, 0, 0, unit, 0, 0, 0, 0, metre, 0, x / n, y / n, 0, 1];
+        const model = [unit, 0, 0, 0, 0, unit, 0, 0, 0, 0, metre * rise, 0, x / n, y / n, 0, 1];
         return new Float32Array(multiply(options.defaultProjectionData.mainMatrix as unknown as ArrayLike<number>, model));
       };
       g.enable(g.DEPTH_TEST);
       g.depthFunc(g.LEQUAL);
+      const draw = riseMs();
+      let rising = false;
+      const riseOf = (tile: TileDrawing) => {
+        const rise = riseAt(now - tile.bornAt, draw);
+        if (rise < 1) rising = true;
+        return rise;
+      };
 
       // Our buildings: paper forms with drawn facades, writing depth so they
       // hide one another and MapLibre's boxes inside them.
@@ -544,7 +550,7 @@ export function createEdgeLayer({
       g.uniform3fv(uniforms.face_u_palette, PALETTE);
       for (const [key, tile] of tiles) {
         if (!visible.has(key) || tile.faceCount === 0) continue;
-        g.uniformMatrix4fv(uniforms.face_u_matrix, false, matrixFor(key, tile.extent));
+        g.uniformMatrix4fv(uniforms.face_u_matrix, false, matrixFor(key, tile.extent, riseOf(tile)));
         g.bindVertexArray(tile.faceVao);
         g.drawArrays(g.TRIANGLES, 0, tile.faceCount);
       }
@@ -567,7 +573,7 @@ export function createEdgeLayer({
       for (const [key, tile] of tiles) {
         if (!visible.has(key)) continue;
         tile.usedAt = now;
-        g.uniformMatrix4fv(uniforms.u_matrix, false, matrixFor(key, tile.extent));
+        g.uniformMatrix4fv(uniforms.u_matrix, false, matrixFor(key, tile.extent, riseOf(tile)));
         g.bindVertexArray(tile.edgeVao);
         for (const pass of passes) {
           g.uniform1f(uniforms.u_width, stroke.width * ratio);
@@ -593,6 +599,7 @@ export function createEdgeLayer({
         g.drawArraysInstanced(g.TRIANGLE_STRIP, 0, 4, routeDrawing.count);
       }
       g.bindVertexArray(null);
+      if (rising) map.triggerRepaint();
     },
     /** Her routes, at full resolution once loaded, to draw on the ground close up. */
     setRoutes(lines: [number, number][][]) {
@@ -604,7 +611,7 @@ export function createEdgeLayer({
       stroke = STROKE[next];
       map?.triggerRepaint();
     },
-    prefetch,
+    prefetchView,
     setPaused(next: boolean) {
       paused = next;
       map?.triggerRepaint();
@@ -623,7 +630,9 @@ export function createEdgeLayer({
         segments += tile.edgeCount;
         faces += tile.faceCount / 3;
       }
-      return { tiles: tiles.size, segments, triangles: faces, pending: pending.size, explored: exploredCount, revealedTiles: tiles.size };
+      const wanted = want().map(({ x, y }) => tileKey(x, y));
+      const drawn = wanted.filter((key) => tiles.has(key)).length;
+      return { tiles: tiles.size, segments, triangles: faces, pending: pending.size, explored: exploredCount, wanted: wanted.length, drawn };
     },
   };
   return layer;
