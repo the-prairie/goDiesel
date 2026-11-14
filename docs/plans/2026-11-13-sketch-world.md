@@ -553,3 +553,41 @@ tried: MapLibre then read them from the cache, the first tile came 1.1 s
 sooner, but the map was created 0.5 s later and the full drawing was no
 sooner (8.6–8.8 s), so it was removed. What would move it: not loading every
 route's data before the map is made, and a smaller first view.
+
+## Round 7: the opening on a slow phone network
+
+Same method as round 6 (production build, 375×812, bundled Chromium), on
+slow 4G (1.6 Mbps, 150 ms) with the CPU slowed 4×, and unthrottled. A new
+measuring mark, "routes listed", is when her first route appears in the list.
+
+**Where the 8.8 s goes.** 0–4.5 s: the page's JavaScript, of which MapLibre
+(280 KB) and the route data for every route (198 KB gzipped, 67 routes; the
+sketch uses 2 of them, about 6 KB) share the line. Nothing of the page showed
+until both had arrived. 4.9–8.9 s: eight z10 vector tiles over Kyoto, 588 KB
+(up to 134 KB each), and 97 KB of label glyphs.
+
+**S26. The page does not wait for MapLibre.** MapLibre is imported
+dynamically, its download starting as the page's module runs, so the paper,
+the status and her route list show once the route data is here. If MapLibre
+cannot load, the app's chunk recovery reloads once as for any chunk; if it
+still cannot, the page says the map couldn't load (not that WebGL is
+missing) and the routes stay.
+
+| Slow 4G + 4× CPU (2 runs each) | Routes listed | Map created | First render | First tile | Idle |
+|---|---|---|---|---|---|
+| Before | 4.9 / 4.6 s | 4.7 / 4.5 s | 5.0 / 4.8 s | 8.2 / 7.8 s | 9.2 / 8.8 s |
+| After | 3.1 / 3.1 s | 4.7 / 4.6 s | 4.9 / 4.8 s | 8.0 / 7.8 s | 8.9 / 8.8 s |
+
+Unthrottled (5 runs each), idle: before 0.81–1.24 s (median 0.94 s), after
+0.86–0.99 s (median 0.90 s).
+
+**Measured, not done.**
+- *A smaller first view.* Tiles the opening needs: as now 8 (588 KB); flat
+  or pitch 30, 6 (525 KB); zoomed out 0.5–1, 6 at z9 (755 KB); flat and
+  zoomed out 1, 4 (615 KB). At best 63 KB (about 0.3 s) for a different
+  opening; not worth it.
+- *Not loading every route's data before the map.* Needs a smaller generated
+  projection (the sketch's region only), a build pipeline change, so it is
+  held for a decision. A throwaway build with a Kyoto-only copy (never
+  committed) measured: routes listed 2.2 s, map created 3.7–3.8 s, first
+  tile 7.1–7.4 s, idle 8.0–8.2 s.

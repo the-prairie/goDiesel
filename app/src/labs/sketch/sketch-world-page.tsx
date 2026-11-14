@@ -5,7 +5,6 @@ import type { GeoJSONSource, Map as MapLibreMap, VectorTileSource } from "maplib
 import { APP_PATHS, decodedRouteSlug, sketchRealmPath, sketchWorldPath } from "@/app/route-paths";
 import { loadRouteDetail } from "@/data/route-repository";
 import { routes } from "@/data/routes";
-import maplibregl from "@/providers/maplibre";
 import { CROSSFADE_MS, WIPE_STEP_MS } from "@/labs/overland/model/dither-wipe";
 import { buildOverlandEntries } from "@/labs/overland/model/overland-entries";
 import { placeLook } from "@/labs/overland/model/place-biomes";
@@ -35,6 +34,18 @@ import { useReducedMotion } from "@/ui/use-reduced-motion";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@/labs/overland/overland.css";
 import "./sketch.css";
+
+// MapLibre (280 KB) is not in the page's static graph (S26): the paper, the
+// status and her route list render as soon as the route data is here, while
+// the library is still arriving. Its download starts when this module runs.
+type MapLibreModule = typeof import("@/providers/maplibre").default;
+let maplibreLoad: Promise<MapLibreModule> | undefined;
+const loadMaplibre = () =>
+  (maplibreLoad ??= import("@/providers/maplibre").then((module) => module.default).catch((error: unknown) => {
+    maplibreLoad = undefined;
+    throw error;
+  }));
+void loadMaplibre().catch(() => undefined);
 
 // The proof covers one city: Kyoto and her routes there.
 const CITY = "Kyoto, Japan";
@@ -143,6 +154,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     dispatch({ type: "loadStarted", loadId });
     const back = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("route");
     const start: Camera = realmSlug ? routeStartView(lineOf(realmSlug) ?? EXPLORED[0].line) : back && lineOf(back) ? cityCamera(back) : farView();
+    const create = (maplibregl: MapLibreModule) => {
     let map: MapLibreMap;
     try {
       // Timing marks (standard performance marks, cheap): where the opening's time goes.
@@ -228,6 +240,21 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
       mapRef.current = null;
       edgesRef.current = null;
       dispatch({ type: "disposed" });
+    };
+    };
+    let disposed = false;
+    let dispose: (() => void) | undefined;
+    void loadMaplibre().then(
+      (maplibregl) => {
+        if (!disposed) dispose = create(maplibregl);
+      },
+      () => {
+        if (!disposed) dispatch({ type: "mapFailed", loadId, reason: "style" });
+      },
+    );
+    return () => {
+      disposed = true;
+      dispose?.();
     };
     // The map is made once; options and routes are sent to it.
   }, []);
@@ -542,7 +569,9 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
 
         {state.phase === "degraded" || unavailable || state.phase === "loading" || state.phase === "idle" ? (
           <p className="sketch-status" data-loading={state.phase === "loading" || state.phase === "idle"} data-testid="sketch-status" role="status">
-            {unavailable
+            {unavailable && state.reason === "style"
+              ? "The map couldn't load right now. Her routes are listed below and still open in 3D."
+              : unavailable
               ? "This map needs WebGL, which this browser cannot give it. Her routes are listed below and still open in 3D."
               : state.phase === "degraded"
                 ? "The map's tiles aren't loading right now; her routes are still here."

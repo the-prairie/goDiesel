@@ -34,6 +34,8 @@ async function stubTiles(page: Page, mode: "empty" | "failing" = "empty", delayM
 }
 
 const world = (page: Page) => page.getByTestId("sketch-world");
+// MapLibre's own chunk (named after its provider module), not its CSS or worker.
+const MAPLIBRE_CHUNK = /\/assets\/maplibre-[A-Za-z0-9_-]+\.js$/;
 
 test("opens on the sketched world, her Kyoto routes listed exactly as written, OpenStreetMap credited", async ({ page }) => {
   await stubTiles(page);
@@ -125,6 +127,32 @@ test("with Save-Data on, choosing a route loads nothing from Google until Jump i
   await page.locator(`.sketch-chip[data-slug="${GOLD.slug}"]`).click();
   await page.waitForTimeout(500);
   expect(await warmCalls(page)).toBe(0);
+});
+
+test("her routes are listed on the paper before the map's library has arrived", async ({ page }) => {
+  await stubTiles(page);
+  // Hold back MapLibre's chunk: the page must not wait for it to say what it is.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(MAPLIBRE_CHUNK, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/#/lab/sketch");
+  await expect(page.getByTestId("sketch-routes").getByRole("button").first()).toContainText(GOLD.title, { timeout: 15_000 });
+  await expect(page.getByTestId("sketch-status")).toContainText("Drawing the world");
+  await expect(world(page)).not.toHaveAttribute("data-map-phase", "ready");
+  release();
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready", { timeout: 30_000 });
+});
+
+test("if the map's library cannot load, the page says so plainly and still lists her routes", async ({ page }) => {
+  await stubTiles(page);
+  await page.route(MAPLIBRE_CHUNK, (route) => route.abort());
+  await page.goto("/#/lab/sketch");
+  await expect(page.getByTestId("sketch-status")).toContainText("The map couldn't load right now", { timeout: 15_000 });
+  await expect(page.getByTestId("sketch-status")).not.toContainText("WebGL");
+  await expect(page.getByTestId("sketch-routes").getByRole("button").first()).toContainText(GOLD.title);
 });
 
 test("choosing a route and jumping in hands over to the 3D replay; Back returns to the sketch at that route", async ({ page }) => {
