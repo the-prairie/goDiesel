@@ -798,3 +798,72 @@ Bundles:
 - the realm chunk is 23.9 KB (was 15.6);
 - Overland is 139.8 of 150 KiB (was 131.8);
 - the sketch world is unchanged at 85.8 KiB.
+
+## Round 12: planted moments, the TV storefront first
+
+**S31. A catalog of moments and their placements, hers and private.**
+- *Model* (`moment-catalog.ts`):
+  - A catalog entry: an id, a kind ("tv-wall" first), a title for her
+    reference (also its accessible name), a clip by URL or none, an optional
+    caption, and a public flag (default false).
+  - A placement: a building front (lat/lng and facing) showing one entry,
+    or none.
+  - An entry may stand in several places or none, and a place may be
+    swapped or emptied.
+  - A placement whose entry has gone shows nothing. An entry with no clip
+    shows no signal.
+- *Private by default*:
+  - Her `moments.json` and clips live in `app/public/moments/`, which is
+    gitignored. They are loaded over a committed example: one "no signal"
+    entry, placed 370 m along route 064 at 34.995784, 135.769891, facing
+    185°, a street-facing shop inside her corridor.
+  - `make-dist.sh` rebuilds `dist/moments/` with only the entries she flags
+    public, their placements and their clips (`app/scripts/moments-dist.mjs`).
+    A public entry whose clip is not on the building machine ships with no
+    clip and shows no signal. Without her file, nothing of hers ships.
+- *In the world*:
+  - Each placement is a button on its building: a small shop window, the
+    one thing in colour and moving (CSS only).
+  - It is shown from zoom 10 in and named "<title>, a planted moment".
+  - It is placed by a lazy `moment-layer` chunk once the map is up; the
+    world's own bundle grew 0.4 KiB.
+- *Opening* (the `sketch-moment` lifecycle):
+  - The camera flies to the street in front of the shop, looking at its
+    front, and the drawn storefront (`moment-tv-wall`, its own chunk) fades
+    in and pushes in to the window.
+  - Nine sets play the clip muted, inline and looping, each treated
+    differently. Sound is hers to turn on. The clip is fetched only now and
+    released on leaving.
+  - With Save-Data or reduced data, the clip waits for "Play the clip".
+    Without a clip, or when it fails, the sets show no signal.
+  - Reduced motion cuts the flight and the push-in.
+  - Back or Escape puts the camera back exactly and focus back on the
+    moment.
+  - The caption shows only when the entry has one.
+- *Her catalog view* (`#/lab/moments`): each entry with a silent preview,
+  where it stands or "Not placed", and places that show nothing.
+- *Not built: assigning and swapping in review mode.* It needs her private
+  file written from the browser. The proposal:
+  - Extend the owner writer of ADR-0010 (loopback `127.0.0.1:8766`), not a
+    new path, with `GET`/`PUT /api/admin/moments`.
+  - It writes `app/public/moments/moments.json` atomically under the
+    existing mutation lock, origin check and size cap.
+  - It validates the moments contract: ids, kinds, placements naming
+    entries or null, coordinates, facing, and clip URLs only under
+    `/moments/`.
+  - It needs no rebuild.
+  - It needs the live-pipeline security assertions extended, and ADR-0010
+    amended to widen the writer's scope beyond curation.
+  - The writer is loopback-only by design, so assigning stays a laptop task;
+    her phone on the LAN can view but not save.
+  - In review mode: tapping a placed moment offers swap or remove; tapping
+    a building offers the catalog. The front faces the nearest street (from
+    the tile's transportation lines) unless she turns it. That flow would
+    be its own registered lifecycle.
+
+Bundles:
+- sketch world: 86.2 of 87 KiB (budget raised from 86);
+- planted moments: 11.2 of 12 KiB (model 0.8, layer 3.3, tv-wall scene
+  7.1 KiB);
+- catalog page: 2.4 of 6 KiB;
+- initial shell: +0.3 KiB, for the new lab route.

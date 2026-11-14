@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { GeoJSONSource, Map as MapLibreMap, VectorTileSource } from "maplibre-gl";
 
@@ -46,6 +46,9 @@ const loadMaplibre = () =>
     throw error;
   }));
 void loadMaplibre().catch(() => undefined);
+
+// Planted moments live in their own chunk, loaded once the map is up.
+const MomentLayer = lazy(() => import("@/labs/sketch/moment-layer"));
 
 // The proof covers one city: Kyoto and her routes there.
 const CITY = "Kyoto, Japan";
@@ -145,6 +148,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
       cancelled = true;
     };
   }, [chosen, realmSlug, mapUp]);
+  const [momentOpen, setMomentOpen] = useState(false);
   const handoverRef = useRef(handover);
   handoverRef.current = handover;
   const reducedRef = useRef(reducedMotion);
@@ -489,7 +493,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           setRootElement(element);
         }}>
         <h1 className="sr-only">Kyoto, sketched: {ENTRIES.length} routes</h1>
-        <div className="sketch-stage" data-cover-opacity={cover.opacity} inert={!cover.interactive} style={stageStyle}>
+        <div className="sketch-stage" data-cover-opacity={cover.opacity} inert={!cover.interactive || momentOpen} style={stageStyle}>
           <div className="sketch-map" data-testid="sketch-map" ref={hostRef} role="region" aria-label="Sketched map" />
           {/* The real city, Google's 3D drawn as the sketch, fading in over the drawn one. */}
           <div
@@ -506,7 +510,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           {options.look === "pencil" ? <div aria-hidden="true" className="sketch-grain" /> : null}
         </div>
 
-        <div className="sketch-ui" hidden={!cover.interactive} inert={!cover.interactive}>
+        <div className="sketch-ui" hidden={!cover.interactive} inert={!cover.interactive || momentOpen}>
           <div className="sketch-top">
             <button className="sketch-key" onClick={() => navigate(APP_PATHS.atlas)} type="button">
               Exit
@@ -604,6 +608,11 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
         ) : null}
       </div>
 
+      {mapUp && mapRef.current ? (
+        <Suspense fallback={null}>
+          <MomentLayer map={mapRef.current} move={move} onOpenChange={setMomentOpen} reducedMotion={reducedMotion} />
+        </Suspense>
+      ) : null}
       {realmEntry && jumpMap && rootElement ? (
         <OverlandJump
           container={rootElement}

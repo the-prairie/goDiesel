@@ -1238,6 +1238,28 @@
       "identity": "a load id minted per attempt; firstViewDrawn, timedOut, failed and fadeFinished must name the current load"
     },
     {
+      "id": "sketch-moment",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "A planted moment in the sketch world, opened: a tap remembers the camera and approaches the shop front; the scene opens muted with its clip loading, held under Save-Data until asked, or showing no signal when the entry has no clip or it fails; sound is hers to turn on; Back or Escape leaves and the camera returns to where she was.",
+      "module": "app/src/labs/sketch/sketch-moment-state.ts",
+      "transition": "reduceMoment",
+      "test": [
+        "app/src/labs/sketch/sketch-moment-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/sketch/moment-layer.tsx",
+        "app/src/labs/sketch/moment-tv-wall.tsx"
+      ],
+      "states": [
+        "closed",
+        "approaching",
+        "open",
+        "leaving"
+      ],
+      "identity": "the placement id of the moment opened; one at a time"
+    },
+    {
       "id": "sketch-ridge-gesture",
       "kind": "reducer",
       "area": "react-app",

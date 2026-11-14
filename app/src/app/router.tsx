@@ -73,6 +73,11 @@ const OverlandLabPage = lazy(() =>
     default: module.OverlandLabPage,
   })),
 );
+const MomentsCatalogPage = lazy(() =>
+  import("@/labs/sketch/moments-catalog-page").then((module) => ({
+    default: module.MomentsCatalogPage,
+  })),
+);
 const SketchWorldPage = lazy(() =>
   import("@/labs/sketch/sketch-world-page").then((module) => ({
     default: module.SketchWorldPage,
@@ -126,6 +131,7 @@ const productRoutes: RouteObject[] = [
   view("lab/overland/town/:townSlug", "lab", OverlandLabPage),
   view("lab/overland/town/:townSlug/:routeSlug/3d", "lab", OverlandLabPage),
   view("lab/sketch", "lab", SketchWorldPage),
+  view("lab/moments", "lab", MomentsCatalogPage),
   view("lab/sketch/:routeSlug/3d", "lab", SketchWorldPage),
   view("lab/sketch-real", "lab", SketchRealPage),
   view(APP_PATHS.admin.slice(1), "admin", AdminPage),
