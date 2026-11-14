@@ -29,8 +29,8 @@ export function plantMoments(map: MapLibreMap, shown: { placement: Placement; en
     return { placement, kind: entry.kind, button };
   });
   // The drawn buildings know their roofs once their tiles are made.
-  const edges = () => (map.getLayer("building-edges") as unknown as { implementation?: { roofAt?: (lng: number, lat: number) => number | null } } | undefined)?.implementation;
-  const layer = hologramLayer(markers, { reducedMotion, roofAt: (lng, lat) => edges()?.roofAt?.(lng, lat) ?? null });
+  const edges = () => (map.getLayer("building-edges") as unknown as { implementation?: { roofUnder?: (lng: number, lat: number) => { top: number; west: number; east: number; south: number; north: number } | null } } | undefined)?.implementation;
+  const layer = hologramLayer(markers, { reducedMotion, roofUnder: (lng, lat) => edges()?.roofUnder?.(lng, lat) ?? null });
   map.addLayer(layer);
   return () => {
     if (map.getLayer(layer.id)) map.removeLayer(layer.id);

@@ -9,7 +9,7 @@
 // end of a stroke a little, lets it overshoot its corner and draws a second,
 // fainter stroke.
 
-import { roofAt } from "@/labs/sketch/sketch-roof-tops";
+import { roofUnder } from "@/labs/sketch/sketch-roof-tops";
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 
 import type { EdgeRequest, EdgeResponse } from "@/labs/sketch/sketch-edge-worker";
@@ -542,7 +542,7 @@ export function createEdgeLayer({
   /** Starts on exactly the tiles a camera that is not there yet will draw (the jump's landing). */
   const prefetchView = (camera: ViewCamera) => request(tilesForView(camera, TILE_ZOOM, maxTiles));
 
-  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; prefetchView(camera: ViewCamera): void; stats(): EdgeStats; roofAt(lng: number, lat: number): number | null } = {
+  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; prefetchView(camera: ViewCamera): void; stats(): EdgeStats; roofUnder(lng: number, lat: number): { top: number; west: number; east: number; south: number; north: number } | null } = {
     id: "building-edges",
     type: "custom",
     renderingMode: "3d",
@@ -696,14 +696,19 @@ export function createEdgeLayer({
       map?.triggerRepaint();
     },
     prefetchView,
-    /** The drawn roof's height in metres at a place, once its tile is made; else null. */
-    roofAt(lng: number, lat: number) {
+    /** The drawn roof at a place, once its tile is made: its height in metres and its box. */
+    roofUnder(lng: number, lat: number) {
       const n = 2 ** TILE_ZOOM;
       const s = Math.sin((lat * Math.PI) / 180);
       const fx = ((lng + 180) / 360) * n;
       const fy = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
-      const made = tops.get(tileKey(Math.floor(fx), Math.floor(fy)));
-      return made ? roofAt(made.tops, (fx - Math.floor(fx)) * made.extent, (fy - Math.floor(fy)) * made.extent) : null;
+      const [tx, ty] = [Math.floor(fx), Math.floor(fy)];
+      const made = tops.get(tileKey(tx, ty));
+      const roof = made && roofUnder(made.tops, (fx - tx) * made.extent, (fy - ty) * made.extent);
+      if (!made || !roof) return null;
+      const toLng = (u: number) => ((tx + u / made.extent) / n) * 360 - 180;
+      const toLat = (v: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * (ty + v / made.extent)) / n))) * 180) / Math.PI;
+      return { top: roof.top, west: toLng(roof.x0), east: toLng(roof.x1), north: toLat(roof.y0), south: toLat(roof.y1) };
     },
     setPaused(next: boolean) {
       paused = next;

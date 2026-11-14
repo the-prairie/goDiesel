@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { HIT_PT, NEAR_ZOOM, FAR_ZOOM, hitBox, inView, markerShape, motionAt, zoomBlend } from "@/labs/sketch/moment-hologram-math";
+import { HIT_PT, NEAR_ZOOM, FAR_ZOOM, hitBox, inView, markerShape, motionAt, onRoof, zoomBlend } from "@/labs/sketch/moment-hologram-math";
 
 describe("the moment marker between city and street", () => {
   it("is a beacon from far, a hologram up close, and one continuous change between", () => {
@@ -39,13 +39,37 @@ describe("the moment marker between city and street", () => {
   });
 
   it("keeps the television big enough to see mid-approach, and its real size at street level", () => {
-    // Street zoom in Kyoto: about a fifth of a metre a pixel.
-    expect(markerShape(1, 0.2).tv.w).toBeCloseTo(9, 5);
+    // Street zoom in Kyoto: about a fifth of a metre a pixel. About two houses wide.
+    expect(markerShape(1, 0.2).tv.w).toBeCloseTo(15, 5);
     // Mid-approach: a metre and a half a pixel; never under about 30 px across.
     expect(markerShape(0.5, 1.5).tv.w / 1.5).toBeGreaterThanOrEqual(30);
+  });
+
+  it("is shaped like a television set: wider than tall, shallower than tall, floating clear of the roofs", () => {
     const tv = markerShape(1, 0.2).tv;
-    expect(tv.liftM).toBeGreaterThan(0);
-    expect(tv.h).toBeLessThan(tv.w);
+    // The prototype's set: 42 wide, 32 tall, 26 deep.
+    expect(tv.h / tv.w).toBeCloseTo(32 / 42, 2);
+    expect(tv.d / tv.w).toBeCloseTo(26 / 42, 2);
+    expect(tv.liftM).toBeGreaterThanOrEqual(8);
+  });
+
+  it("stands over the middle of the roof, its pool of light inside the roof", () => {
+    // A roof 20 m deep behind a south-facing front, 30 m wide.
+    const lat = 35;
+    const mLat = 1 / 110540;
+    const mLng = 1 / (111320 * Math.cos((lat * Math.PI) / 180));
+    const at = { lng: 135, lat };
+    const box = { west: 135 - 15 * mLng, east: 135 + 15 * mLng, south: lat, north: lat + 20 * mLat };
+    const spot = onRoof(at, 180, box);
+    expect((spot.lat - lat) / mLat).toBeCloseTo(10, 1);
+    expect(spot.lng).toBeCloseTo(135, 9);
+    expect(spot.poolMaxM).toBeCloseTo(8.5, 1);
+    // A shallow roof: the set stands nearer the front, the pool smaller.
+    const shallow = onRoof(at, 180, { ...box, north: lat + 6 * mLat });
+    expect((shallow.lat - lat) / mLat).toBeCloseTo(3, 1);
+    expect(shallow.poolMaxM).toBeLessThan(3);
+    // An unknown roof: four metres in.
+    expect((onRoof(at, 180, null).lat - lat) / mLat).toBeCloseTo(4, 1);
   });
 
   it("has a 44 pt hit area centred on what she sees", () => {

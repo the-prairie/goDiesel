@@ -1,7 +1,7 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 
 import type { MomentKind, Placement } from "@/labs/sketch/moment-catalog";
-import { HIT_PT, inView, markerShape, motionAt, zoomBlend } from "@/labs/sketch/moment-hologram-math";
+import { HIT_PT, inView, markerShape, motionAt, onRoof, zoomBlend } from "@/labs/sketch/moment-hologram-math";
 
 // The planted moment's marker, drawn in the world as a real 3D thing: from
 // city zoom a column of light from the roof (cyan at the base, through pink,
@@ -19,7 +19,7 @@ const MAGENTA: RGB = [1, 0.31, 0.76];
 const LIME: RGB = [0.61, 0.89, 0.42];
 /** Floats a vertex: position, uv, part, colour and alpha. */
 const STRIDE = 10;
-const PART = { beam: 0, pool: 1, ring: 2, face: 3, screen: 4, cone: 5 } as const;
+const PART = { beam: 0, pool: 1, ring: 2, face: 3, front: 4, cone: 5, back: 6, rod: 7 } as const;
 
 /** Each kind's object up close: its faces (the screen is the front). The beam, ring and pool are every kind's. */
 const OBJECTS: Record<MomentKind, { sides: RGB[] }> = {
@@ -46,6 +46,8 @@ const FRAGMENT = `#version 300 es
 precision highp float;
 uniform float u_pulse;
 uniform float u_scan;
+/** Which winding faces the viewer, as MapLibre's projection leaves it. */
+uniform bool u_flip;
 in vec2 v_uv;
 in float v_part;
 in vec4 v_colour;
@@ -63,7 +65,7 @@ void main() {
   } else if (part == 1) {
     float r = length(v_uv);
     c = mix(CYAN, PINK, smoothstep(0.1, 0.8, r));
-    a *= smoothstep(1.0, 0.0, r) * (0.72 + 0.14 * sin(u_pulse * 6.2832));
+    a *= smoothstep(1.0, 0.0, r) * (0.85 + 0.12 * sin(u_pulse * 6.2832)) + smoothstep(0.45, 0.0, r) * 0.25;
   } else if (part == 2) {
     float r = length(v_uv);
     float at = mix(0.25, 1.0, u_pulse);
@@ -72,20 +74,46 @@ void main() {
   } else if (part == 5) {
     c = CYAN;
     a *= mix(0.6, 0.06, v_uv.y);
+  } else if (part == 7) {
+    // A rabbit-ear rod.
+    c = vec3(0.0, 0.5, 0.72);
+    a *= 0.95;
   } else {
-    // The television: translucent faces with an inset outline and moving scanlines; the screen shows colour bars.
-    if (part == 4) {
-      int bar = int(clamp(v_uv.x, 0.0, 0.999) * 7.0);
-      vec3 bars[7] = vec3[7](vec3(0.96), vec3(0.95, 0.91, 0.29), vec3(0.29, 0.88, 0.9), vec3(0.35, 0.84, 0.42), vec3(0.88, 0.38, 0.82), vec3(0.91, 0.33, 0.31), vec3(0.29, 0.44, 0.91));
-      c = bars[bar];
-      a *= 0.9;
-    } else {
-      a *= 0.62;
+    // The set: its front has a bezel, a rounded screen of colour bars and two
+    // knobs; the back shows the bars through it, mirrored and dim; its other
+    // faces are faint, with an inset outline and moving scanlines.
+    // The screen is on the front face alone; seen from behind, through the set,
+    // it reads mirrored (as it would) and dimmer.
+    vec2 uv = v_uv;
+    bool front = part == 4;
+    bool behind = front && gl_FrontFacing == u_flip;
+    a *= front && !behind ? 0.55 : 0.26;
+    float scan = step(0.5, fract((uv.y + u_scan) * 12.0));
+    c = mix(c, vec3(1.0), 0.22 * scan);
+    if (front) {
+      // The screen, with rounded corners (the face is 42 by 32).
+      vec2 p = (uv - vec2(0.385, 0.5)) * vec2(1.3125, 1.0);
+      vec2 q = abs(p) - vec2(0.41 - 0.07, 0.38 - 0.07);
+      float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.07;
+      if (d < 0.0) {
+        int bar = int(clamp((uv.x - 0.07) / 0.63, 0.0, 0.999) * 7.0);
+        vec3 bars[7] = vec3[7](vec3(0.96), vec3(0.97, 0.9, 0.2), vec3(0.15, 0.88, 0.92), vec3(0.25, 0.85, 0.3), vec3(0.92, 0.3, 0.85), vec3(0.95, 0.22, 0.2), vec3(0.2, 0.36, 0.95));
+        c = mix(bars[bar], vec3(1.0), 0.12 * scan);
+        a = v_colour.a * (behind ? 0.45 : 0.96);
+      }
+      float bezel = smoothstep(0.018, 0.0, abs(d));
+      c = mix(c, vec3(0.0, 0.42, 0.62), bezel);
+      a = max(a, v_colour.a * 0.9 * bezel);
+      // Two knobs beside the screen.
+      for (int k = 0; k < 2; k++) {
+        float r = length((uv - vec2(0.86, k == 0 ? 0.64 : 0.38)) * vec2(1.3125, 1.0));
+        float knob = smoothstep(0.075, 0.06, r);
+        c = mix(c, vec3(0.0, 0.42, 0.62), knob);
+        a = max(a, v_colour.a * knob * (behind ? 0.4 : 0.95));
+      }
     }
-    float scan = step(0.5, fract((v_uv.y + u_scan) * 12.0));
-    c = mix(c, vec3(1.0), 0.28 * scan);
-    float edge = min(min(v_uv.x, 1.0 - v_uv.x), min(v_uv.y, 1.0 - v_uv.y));
-    float line = smoothstep(0.075, 0.035, edge);
+    float edge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+    float line = smoothstep(0.04, 0.015, edge);
     c = mix(c, vec3(0.0, 0.5, 0.72), line);
     a = mix(a, v_colour.a * 0.95, line);
   }
@@ -104,10 +132,13 @@ interface Placed extends HologramMarker {
   lng: number;
   lat: number;
   roof: number | null;
+  poolMaxM: number;
 }
 
-/** How far onto the roof from the front the marker stands, in metres. */
-const INSET_M = 4;
+type Roof = { top: number; west: number; east: number; south: number; north: number };
+
+/** Set once by eye: whether the front face's outside is the back-facing side after projection. */
+const FLIP = false;
 /** Until the drawn roof is known. */
 const UNKNOWN_ROOF_M = 8;
 
@@ -117,14 +148,19 @@ function multiply(a: ArrayLike<number>, b: ArrayLike<number>) {
   return out;
 }
 
-export function hologramLayer(markers: HologramMarker[], options: { reducedMotion: boolean; roofAt: (lng: number, lat: number) => number | null }) {
+export function hologramLayer(markers: HologramMarker[], options: { reducedMotion: boolean; roofUnder: (lng: number, lat: number) => Roof | null }) {
   const placed: Placed[] = markers.map((marker) => {
     const { at, facingDeg } = marker.placement;
-    const f = (facingDeg * Math.PI) / 180;
-    const lat = at.lat - (Math.cos(f) * INSET_M) / 110540;
-    const lng = at.lng - (Math.sin(f) * INSET_M) / (111320 * Math.cos((at.lat * Math.PI) / 180));
-    return { ...marker, lng, lat, roof: null };
+    return { ...marker, ...onRoof(at, facingDeg, null), roof: null };
   });
+  /** Once its tile is made, the marker moves to the middle of the roof that is drawn. */
+  const settle = (marker: Placed) => {
+    const { at, facingDeg } = marker.placement;
+    const probe = onRoof(at, facingDeg, null);
+    const roof = options.roofUnder((at.lng + probe.lng) / 2, (at.lat + probe.lat) / 2);
+    if (!roof) return;
+    Object.assign(marker, onRoof(at, facingDeg, roof), { roof: roof.top });
+  };
   let map: MapLibreMap | null = null;
   let gl: WebGL2RenderingContext | null = null;
   let program: WebGLProgram | null = null;
@@ -151,7 +187,7 @@ export function hologramLayer(markers: HologramMarker[], options: { reducedMotio
       g.attachShader(program, shader(g.FRAGMENT_SHADER, FRAGMENT));
       g.linkProgram(program);
       if (!g.getProgramParameter(program, g.LINK_STATUS)) throw new Error(g.getProgramInfoLog(program) ?? "link");
-      for (const name of ["u_matrix", "u_pulse", "u_scan"]) uniforms[name] = g.getUniformLocation(program, name);
+      for (const name of ["u_matrix", "u_pulse", "u_scan", "u_flip"]) uniforms[name] = g.getUniformLocation(program, name);
       buffer = g.createBuffer();
       vao = g.createVertexArray();
       g.bindVertexArray(vao);
@@ -193,6 +229,7 @@ export function hologramLayer(markers: HologramMarker[], options: { reducedMotio
       g.useProgram(program);
       g.uniform1f(uniforms.u_pulse, motion.pulse);
       g.uniform1f(uniforms.u_scan, motion.scan);
+      g.uniform1i(uniforms.u_flip, FLIP ? 1 : 0);
       g.enable(g.DEPTH_TEST);
       g.depthFunc(g.LEQUAL);
       g.depthMask(false);
@@ -202,7 +239,7 @@ export function hologramLayer(markers: HologramMarker[], options: { reducedMotio
       g.bindBuffer(g.ARRAY_BUFFER, buffer);
       let anyInView = false;
       for (const marker of placed) {
-        marker.roof ??= options.roofAt(marker.lng, marker.lat);
+        if (marker.roof === null) settle(marker);
         const roof = marker.roof ?? UNKNOWN_ROOF_M;
         const metre = 1 / (40075016.686 * Math.cos((marker.lat * Math.PI) / 180));
         const s = Math.sin((marker.lat * Math.PI) / 180);
@@ -212,6 +249,9 @@ export function hologramLayer(markers: HologramMarker[], options: { reducedMotio
         const matrix = multiply(main, [metre, 0, 0, 0, 0, -metre, 0, 0, 0, 0, metre, 0, mx, my, 0, 1]);
         const metresPerPixel = 40075016.686 * Math.cos((marker.lat * Math.PI) / 180) / (512 * 2 ** zoom);
         const shape = markerShape(t, metresPerPixel);
+        // Up close the pool and ring stay on the roof.
+        shape.poolM = shape.poolM * (1 - t) + Math.min(shape.poolM, marker.poolMaxM) * t;
+        shape.ringM = shape.ringM * (1 - t) + Math.min(shape.ringM, marker.poolMaxM) * t;
         const data = geometry(shape, motion, roof, right, OBJECTS[marker.kind]);
         g.uniformMatrix4fv(uniforms.u_matrix, false, new Float32Array(matrix));
         g.bufferData(g.ARRAY_BUFFER, data, g.STREAM_DRAW);
@@ -266,18 +306,30 @@ function geometry(shape: ReturnType<typeof markerShape>, motion: ReturnType<type
   const base = roof + tv.liftM * k + motion.bobM;
   // The projection cone, from under the television to the roof.
   {
-    const w = shape.poolM * 0.55;
+    // Its foot meets the pool of light.
+    const w = shape.poolM * 0.9;
     const [rx, ry] = [right[0] * w, right[1] * w];
     for (const i of [0, 1, 2]) vertex([[0, 0, base], [-rx, -ry, roof + lift], [rx, ry, roof + lift]][i] as V3, 0.5, i === 0 ? 0 : 1, PART.cone, CYAN, shape.tvAlpha);
   }
-  // The television, turning slowly.
+  // The set, turning slowly: its front (with the screen) faces -y before it turns.
   const cos = Math.cos(motion.spin);
   const sin = Math.sin(motion.spin);
   const at = (x: number, y: number, z: number): V3 => [x * cos - y * sin, x * sin + y * cos, base + z];
   const corners = [at(-hw, -hd, 0), at(hw, -hd, 0), at(hw, hd, 0), at(-hw, hd, 0), at(-hw, -hd, h), at(hw, -hd, h), at(hw, hd, h), at(-hw, hd, h)];
   const uv: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]];
-  const [front, ...sides] = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7], [4, 5, 6, 7], [3, 2, 1, 0]];
-  quad(corners[front[0]], corners[front[1]], corners[front[2]], corners[front[3]], uv, PART.screen, CYAN, shape.tvAlpha);
-  sides.forEach((face, i) => quad(corners[face[0]], corners[face[1]], corners[face[2]], corners[face[3]], uv, PART.face, object.sides[i % object.sides.length], shape.tvAlpha));
+  const face = (ids: number[], part: number, rgb: RGB) => quad(corners[ids[0]], corners[ids[1]], corners[ids[2]], corners[ids[3]], uv, part, rgb, shape.tvAlpha);
+  face([0, 1, 5, 4], PART.front, MAGENTA);
+  face([2, 3, 7, 6], PART.back, MAGENTA);
+  [[1, 2, 6, 5], [3, 0, 4, 7], [4, 5, 6, 7], [3, 2, 1, 0]].forEach((ids, i) => face(ids, PART.face, object.sides[i % object.sides.length]));
+  // Rabbit ears: two rods in a V from the top, each two crossed strips so they read from any side.
+  const r = hw * 0.03;
+  for (const side of [-1, 1]) {
+    const [bx, bz] = [side * hw * 0.12, h];
+    const [tx, tz] = [side * hw * 0.62, h * 1.75];
+    const len = Math.hypot(tx - bx, tz - bz);
+    const [nx, nz] = [((tz - bz) / len) * r, (-(tx - bx) / len) * r];
+    quad(at(bx - nx, 0, bz - nz), at(bx + nx, 0, bz + nz), at(tx + nx, 0, tz + nz), at(tx - nx, 0, tz - nz), uv, PART.rod, CYAN, shape.tvAlpha);
+    quad(at(bx, -r, bz), at(bx, r, bz), at(tx, r, tz), at(tx, -r, tz), uv, PART.rod, CYAN, shape.tvAlpha);
+  }
   return new Float32Array(out);
 }

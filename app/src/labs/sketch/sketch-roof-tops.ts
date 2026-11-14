@@ -13,17 +13,22 @@ export function topOf(faces: Float32Array) {
   return top;
 }
 
-/** The roof under a point in tile units: the smallest building whose box holds it, or null. */
-export function roofAt(tops: Float32Array, x: number, y: number) {
-  let best: number | null = null;
+/** The roof under a point in tile units: the smallest building whose box holds it (its box and top), or null. */
+export function roofUnder(tops: Float32Array, x: number, y: number) {
+  let best = -1;
   let area = Infinity;
   for (let i = 0; i < tops.length; i += TOP_STRIDE) {
     if (x < tops[i] || y < tops[i + 1] || x > tops[i + 2] || y > tops[i + 3]) continue;
     const size = (tops[i + 2] - tops[i]) * (tops[i + 3] - tops[i + 1]);
     if (size < area) {
       area = size;
-      best = tops[i + 4];
+      best = i;
     }
   }
-  return best;
+  return best < 0 ? null : { x0: tops[best], y0: tops[best + 1], x1: tops[best + 2], y1: tops[best + 3], top: tops[best + 4] };
+}
+
+/** The height of the roof under a point in tile units, or null. */
+export function roofAt(tops: Float32Array, x: number, y: number) {
+  return roofUnder(tops, x, y)?.top ?? null;
 }

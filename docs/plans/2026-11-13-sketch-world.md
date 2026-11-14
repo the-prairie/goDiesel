@@ -986,3 +986,20 @@ Bundles:
   12.6 of 14 KiB with the world (catalog, hand-over, layer with the
   hologram), and each kind's scene within 8 KiB on opening (tv-wall 7.5).
   A second kind of scene gets its own 8 KiB.
+- *The set, second pass* (after the owner's coordinator looked at the
+  street capture: it read as a coloured glass cube):
+  - It has the prototype's proportions (42 wide, 32 tall, 26 deep) and is
+    about two houses wide at street zoom (15 m; never under 50 px on the way
+    in, scaling in from half size). It floats 9 m up, clear of the
+    neighbouring roofs.
+  - Its front has a bezel, a rounded screen of opaque colour bars and two
+    knobs. The other faces are faint. Seen from behind, through the set,
+    the screen reads mirrored and dimmer. Two rabbit-ear rods stand on top.
+  - It stands over the middle of the roof that is drawn: the edge layer
+    gives the roof's box (`roofUnder`), the set stands as far in as the
+    middle (at most 12 m), and the pool of light is kept inside the roof.
+    On her example's narrow house (8.8 m wide) the pool is small.
+  - Its motion, recorded in simulator Safari: one turn in 9 s and a gentle
+    bob.
+  - Planted moments with the world: 14.8 KiB (budget 15, raised by 1). The
+    sketch world: 87.3 of 88 KiB.

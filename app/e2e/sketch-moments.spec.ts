@@ -197,6 +197,9 @@ test("opening it takes the camera to the shop front, then the window: nine sets,
   expect(there.zoom).toBeGreaterThan(18);
   expect(there.bearing).toBeCloseTo(5, 0);
   await expect(scene.getByTestId("moment-screen")).toHaveCount(9);
+  // The world's own controls are gone while the moment is open: not shown, not reachable.
+  for (const control of [page.getByTestId("sketch-routes"), page.getByRole("group", { name: "Where to look" }), page.getByRole("group", { name: "Map controls" })]) await expect(control).toBeHidden();
+  expect(await page.evaluate(() => [...document.querySelectorAll<HTMLElement>(".sketch-ui button")].filter((b) => b.offsetParent !== null && !b.closest("[inert]")).length)).toBe(0);
   await expect(scene).toHaveAttribute("data-media", "playing", { timeout: 15_000 });
   const sound = scene.getByRole("button", { name: /^Sound (on|off)$/ });
   await expect(sound).toHaveAttribute("aria-pressed", "false");
@@ -211,6 +214,7 @@ test("opening it takes the camera to the shop front, then the window: nine sets,
   for (const key of ["lng", "lat", "zoom", "pitch", "bearing"] as const) expect(after[key]).toBeCloseTo(before[key], 5);
   // Focus goes back to the moment within a frame or two of the world waking.
   await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.momentId), { timeout: 500 }).toBe("test-shop");
+  await expect(page.getByTestId("sketch-routes")).toBeVisible();
   // Escape leaves as Back does.
   await moment.click();
   await expect(scene).toBeVisible({ timeout: 15_000 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { roofAt, topOf, TOP_STRIDE } from "@/labs/sketch/sketch-roof-tops";
+import { roofAt, roofUnder, topOf, TOP_STRIDE } from "@/labs/sketch/sketch-roof-tops";
 
 describe("the tops of the drawn buildings", () => {
   it("is the highest point of a building's faces, roof and rooftop boxes included", () => {
@@ -20,5 +20,11 @@ describe("the tops of the drawn buildings", () => {
     expect(roofAt(tops, 50, 50)).toBe(9);
     expect(roofAt(tops, 10, 10)).toBe(30);
     expect(roofAt(tops, 150, 150)).toBeNull();
+  });
+
+  it("gives the roof's box with its top, so a marker can stand in its middle", () => {
+    const tops = new Float32Array([0, 0, 100, 100, 30, 40, 40, 60, 60, 9]);
+    expect(roofUnder(tops, 50, 50)).toEqual({ x0: 40, y0: 40, x1: 60, y1: 60, top: 9 });
+    expect(roofUnder(tops, 150, 150)).toBeNull();
   });
 });

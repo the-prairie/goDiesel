@@ -109,11 +109,13 @@ if (entry.includes("sketch-edge-worker") || entry.includes("building-edges")) {
 // With the world: the catalog model, the layer that plants each moment and
 // draws its marker (the beacon that resolves into a hologram), and the
 // hand-over into a scene. 12.6 KiB with the hologram marker; budget 14 KiB.
+// 2026-11-14: 15 KiB for the marker as a recognisable set (rabbit ears, a
+// bezelled screen with knobs, the bars seen mirrored from behind): 14.8 KiB.
 const SCENE_CHUNK = /^moment-(tv-wall)-.*\.js$/;
 const momentChunks = assets.filter((name) => /^moment-.*\.js$/.test(name) && !name.startsWith("moment-review-") && !SCENE_CHUNK.test(name));
 let momentBytes = 0;
 for (const name of momentChunks) momentBytes += (await stat(path.join(dist, "assets", name))).size;
-if (momentBytes > 14 * 1024) throw new Error(`Planted moments with the world are ${(momentBytes / 1024).toFixed(1)} KiB; budget is 14 KiB.`);
+if (momentBytes > 15 * 1024) throw new Error(`Planted moments with the world are ${(momentBytes / 1024).toFixed(1)} KiB; budget is 15 KiB.`);
 // Each moment's scene, loaded only when she opens one of its kind
 // (2026-11-14): the tv-wall storefront, 7.5 KiB. Budget 8 KiB for each
 // scene. A second kind of scene gets its own 8 KiB (add it to SCENE_CHUNK),

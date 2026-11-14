@@ -510,7 +510,8 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           {options.look === "pencil" ? <div aria-hidden="true" className="sketch-grain" /> : null}
         </div>
 
-        <div className="sketch-ui" hidden={!cover.interactive} inert={!cover.interactive || momentOpen}>
+        {/* While a moment approaches or is open, the world's own controls are hidden, not merely covered. */}
+        <div className="sketch-ui" hidden={!cover.interactive || momentOpen} inert={!cover.interactive || momentOpen}>
           <div className="sketch-top">
             <button className="sketch-key" onClick={() => navigate(APP_PATHS.atlas)} type="button">
               Exit
