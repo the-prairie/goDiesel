@@ -99,12 +99,12 @@ These describe the code as it is. The tables below list each lifecycle; these no
 
 | Kind | Entries |
 | --- | --- |
-| `reducer` | 39 |
+| `reducer` | 40 |
 | `disposition` | 1 |
 | `protocol` | 3 |
 | `derived` | 7 |
 | `left-implicit` | 10 |
-| total | 60 |
+| total | 61 |
 
 ### Reducers
 
@@ -149,6 +149,7 @@ These describe the code as it is. The tables below list each lifecycle; these no
 | `admin-rebuild` | One background build.py run at a time in the owner server. | `admin_rebuild.py` | `reduce_rebuild` | `idle`, `running`, `succeeded`, `failed` | run id; succeed and fail must name the running id |
 | `admin-classify` | The owner server's background region classifier and its snapshot phase. | `admin_classify.py` | `reduce_classify` | `idle`, `running`, `finished`, `failed` | none; admin.py serialises events under a lock, a second start while running is a no-op, and progress must be the next count |
 | `sketch-map` | The sketch world's MapLibre map: it loads, is ready once its style has drawn, is unavailable without WebGL, and is degraded (paper and her routes, still usable) while its tiles fail, recovering when they load again. | `app/src/labs/sketch/sketch-map-state.ts` | `reduceSketchMap` | `idle`, `loading`, `ready`, `degraded`, `unavailable` | a load id per map; events from an earlier load are ignored |
+| `sketch-handover` | The sketch world's hand-over from the drawn (OpenStreetMap) city to the real-geometry (Google Photorealistic 3D) sketch: zooming into a covered city on a capable device loads the real city while the drawn one stays; it fades in once its first view is drawn, is declined if too slow or failing, and fades out and is torn down below the exit zoom. | `app/src/labs/sketch/sketch-handover-state.ts` | `reduceHandover` | `drawn`, `loading`, `fadingIn`, `real`, `fadingOut`, `declined` | a load id minted per attempt; firstViewDrawn, timedOut, failed and fadeFinished must name the current load |
 
 ### Dispositions
 

@@ -1213,6 +1213,29 @@
         "unavailable"
       ],
       "identity": "a load id per map; events from an earlier load are ignored"
+    },
+    {
+      "id": "sketch-handover",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The sketch world's hand-over from the drawn (OpenStreetMap) city to the real-geometry (Google Photorealistic 3D) sketch: zooming into a covered city on a capable device loads the real city while the drawn one stays; it fades in once its first view is drawn, is declined if too slow or failing, and fades out and is torn down below the exit zoom.",
+      "module": "app/src/labs/sketch/sketch-handover-state.ts",
+      "transition": "reduceHandover",
+      "test": [
+        "app/src/labs/sketch/sketch-handover-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/sketch/sketch-world-page.tsx"
+      ],
+      "states": [
+        "drawn",
+        "loading",
+        "fadingIn",
+        "real",
+        "fadingOut",
+        "declined"
+      ],
+      "identity": "a load id minted per attempt; firstViewDrawn, timedOut, failed and fadeFinished must name the current load"
     }
   ]
 }

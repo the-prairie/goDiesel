@@ -133,3 +133,109 @@ test("when the map's tiles fail, her routes stay, with a quiet word about the ma
   await expect(page.getByTestId("sketch-status")).toContainText("tiles aren't loading", { timeout: 15_000 });
   await expect(page.getByTestId("sketch-routes").getByRole("button").first()).toContainText(GOLD.title);
 });
+
+// ---------------------------------------------------------------- the hand-over (S17)
+// The real-geometry sketch is a stand-in here (no Google tiles in tests): a
+// div that reports its first view, records its camera and colour flood, and
+// counts being made and torn down.
+
+declare global {
+  interface Window {
+    __realLog?: { created: number; destroyed: number; cameras: number; floods: number[]; firstView: boolean };
+    __GODIESEL_SKETCH_HANDOVER_TIMEOUT_MS__?: number;
+  }
+}
+
+async function fakeRealCity(page: Page, { firstView = true }: { firstView?: boolean } = {}) {
+  await page.addInitScript((reportFirstView) => {
+    window.__realLog = { created: 0, destroyed: 0, cameras: 0, floods: [], firstView: reportFirstView };
+    window.__GODIESEL_SKETCH_HANDOVER_TIMEOUT_MS__ = 1500;
+    (window as unknown as { __GODIESEL_SKETCH_REAL_FACTORY__: unknown }).__GODIESEL_SKETCH_REAL_FACTORY__ = (options: { container: HTMLElement; onFirstView: () => void }) => {
+      const log = window.__realLog!;
+      log.created += 1;
+      const div = document.createElement("div");
+      div.dataset.testid = "sketch-real-fake";
+      div.style.cssText = "position:absolute;inset:0;background:#e8e2d0";
+      options.container.append(div);
+      if (log.firstView) setTimeout(() => options.onFirstView(), 200);
+      return {
+        setCamera: () => (log.cameras += 1),
+        setCorridor: () => undefined,
+        setFlood: (value: number) => log.floods.push(value),
+        stats: () => ({ tilesetBytes: 0 }),
+        destroy: () => {
+          log.destroyed += 1;
+          div.remove();
+        },
+      };
+    };
+  }, firstView);
+}
+
+const zoomTo = (page: Page, zoom: number) =>
+  page.evaluate((z) => (window as unknown as { __sketch: { map: { jumpTo(o: object): void } } }).__sketch.map.jumpTo({ center: [135.7737, 34.9948], zoom: z, pitch: 50 }), zoom);
+const handover = (page: Page) => page.getByTestId("sketch-world");
+
+test("zooming into Kyoto hands over to the real city with a matched camera, and zooming out tears it down", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fakeRealCity(page);
+  await stubTiles(page);
+  await page.goto("/#/lab/sketch");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  await expect(handover(page)).toHaveAttribute("data-handover", "drawn");
+  await zoomTo(page, 16.5);
+  await expect(handover(page)).toHaveAttribute("data-handover", "real", { timeout: 10_000 });
+  await expect(page.getByTestId("sketch-real-fake")).toBeVisible();
+  const before = await page.evaluate(() => window.__realLog!.cameras);
+  expect(before).toBeGreaterThan(0);
+  // MapLibre stays the camera's master: the real city follows every move.
+  await zoomTo(page, 16.8);
+  await expect.poll(() => page.evaluate(() => window.__realLog!.cameras)).toBeGreaterThan(before);
+  // Between the exit and enter zooms nothing changes; below the exit zoom it goes.
+  await zoomTo(page, 14.2);
+  await expect(handover(page)).toHaveAttribute("data-handover", "real");
+  await zoomTo(page, 13);
+  await expect(handover(page)).toHaveAttribute("data-handover", "drawn", { timeout: 10_000 });
+  await expect(page.getByTestId("sketch-real-fake")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__realLog!)).toMatchObject({ created: 1, destroyed: 1 });
+});
+
+test("keeps the drawn city, and loads nothing, for a device saving data", async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, "connection", { value: { saveData: true }, configurable: true }));
+  await fakeRealCity(page);
+  await stubTiles(page);
+  await page.goto("/#/lab/sketch");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  await zoomTo(page, 16.5);
+  await expect(handover(page)).toHaveAttribute("data-handover", "declined");
+  await expect(handover(page)).toHaveAttribute("data-handover-reason", "save-data");
+  expect(await page.evaluate(() => window.__realLog!.created)).toBe(0);
+});
+
+test("keeps the drawn city when the real city's first view is too slow, and lets it go", async ({ page }) => {
+  await fakeRealCity(page, { firstView: false });
+  await stubTiles(page);
+  await page.goto("/#/lab/sketch");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  await zoomTo(page, 16.5);
+  await expect(handover(page)).toHaveAttribute("data-handover", "loading");
+  await expect(handover(page)).toHaveAttribute("data-handover-reason", "slow", { timeout: 10_000 });
+  await expect(page.getByTestId("sketch-real-fake")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__realLog!)).toMatchObject({ created: 1, destroyed: 1 });
+});
+
+test("jumping from the real city floods colour on the same geometry before the 3D replay", async ({ page }) => {
+  test.setTimeout(90_000);
+  await installGoogleReplay(page, "ready");
+  await fakeRealCity(page);
+  await stubTiles(page);
+  await page.goto(`/#/lab/sketch?route=${GOLD.slug}`);
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  await zoomTo(page, 16.5);
+  await expect(handover(page)).toHaveAttribute("data-handover", "real", { timeout: 10_000 });
+  await page.getByTestId("sketch-jump").click();
+  await expect(page.locator("[data-jump-phase]")).toHaveAttribute("data-jump-phase", "realm", { timeout: 30_000 });
+  const floods = await page.evaluate(() => window.__realLog!.floods);
+  expect(Math.max(...floods)).toBe(1);
+  expect(floods.some((value) => value > 0 && value < 1)).toBe(true);
+});

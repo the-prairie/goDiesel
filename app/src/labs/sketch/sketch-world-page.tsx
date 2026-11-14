@@ -23,6 +23,7 @@ import { sketchOptions, withOption, type SketchLook } from "@/labs/sketch/sketch
 import { REVEAL_LAYERS } from "@/labs/sketch/sketch-tile";
 import { REVEAL_RADIUS_M, exploredRoutes, type RevealMode } from "@/labs/sketch/sketch-reveal";
 import { sketchStyle } from "@/labs/sketch/sketch-style";
+import { HANDOVER_FADE_MS, useSketchHandover } from "@/labs/sketch/use-sketch-handover";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -74,6 +75,19 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
   const [jumpCoverState, setCover] = useState<TownCover>(() => townCover(initialOverlandJumpState()));
   const cover = realmSlug ? jumpCoverState : townCover(initialOverlandJumpState());
   const revealRef = useRef(options.reveal);
+  const realLayerRef = useRef<HTMLDivElement>(null);
+  const handover = useSketchHandover({
+    mapRef,
+    layerRef: realLayerRef,
+    mapReady: state.phase === "ready" || state.phase === "degraded",
+    paused: Boolean(realmSlug),
+    explored: EXPLORED,
+    reveal: options.reveal,
+    look: options.look,
+    reducedMotion,
+  });
+  const handoverRef = useRef(handover);
+  handoverRef.current = handover;
   const reducedRef = useRef(reducedMotion);
   reducedRef.current = reducedMotion;
 
@@ -165,7 +179,11 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     const credit = host.querySelector(".maplibregl-ctrl-bottom-right");
     const creditObserver = new ResizeObserver(() => rootRef.current?.style.setProperty("--sk-credit", `${credit?.getBoundingClientRect().height ?? 0}px`));
     if (credit) creditObserver.observe(credit);
-    (window as Window & { __sketch?: unknown }).__sketch = { map, edges: () => edgesRef.current?.stats() };
+    (window as Window & { __sketch?: unknown }).__sketch = {
+      map,
+      edges: () => edgesRef.current?.stats(),
+      handover: () => ({ phase: handoverRef.current.state.phase, real: handoverRef.current.view()?.stats() ?? null, times: handoverRef.current.phaseTimes() }),
+    };
     return () => {
       creditObserver.disconnect();
       map.remove();
@@ -205,6 +223,28 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     );
   }, [options.look, options.reveal]);
 
+  // With the real city up, the keys sit above Google's credit line too.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    if (!handover.real) {
+      root.style.setProperty("--sk-credit-real", "0px");
+      return;
+    }
+    const measure = () => {
+      const credits = realLayerRef.current?.querySelector(".cesium-viewer-bottom");
+      root.style.setProperty("--sk-credit-real", `${credits ? credits.getBoundingClientRect().height + 4 : 0}px`);
+    };
+    measure();
+    const timer = window.setInterval(measure, 500);
+    return () => window.clearInterval(timer);
+  }, [handover.real]);
+
+  // Under the real city the drawn buildings need not be drawn.
+  useEffect(() => {
+    edgesRef.current?.setPaused(handover.state.phase === "real");
+  }, [handover.state.phase]);
+
   // The chosen route stands out.
   useEffect(() => {
     const map = mapRef.current;
@@ -236,15 +276,27 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     else navigate(sketchWorldPath(new URLSearchParams(location.search).toString()), { replace: true });
   }, [location.search, navigate, realmState]);
 
+  // From the real city the jump is a colour flood on the same geometry (S17.5):
+  // the camera flies down as the ink fades and Google's colour comes in.
   const jumpCover: TownJumpCover = useMemo(
     () => ({
       dive: () => {
         const line = realmSlug ? lineOf(realmSlug) : undefined;
-        return line ? move(routeStartView(line), 2800) : Promise.resolve();
+        if (!line) return Promise.resolve();
+        const flying = move(routeStartView(line), 2800);
+        if (!handoverRef.current.real) return flying;
+        return Promise.all([flying, handoverRef.current.flood(0, 1, 2800)]).then(() => undefined);
       },
-      finish: () => mapRef.current?.stop(),
+      finish: () => {
+        mapRef.current?.stop();
+        handoverRef.current.view()?.setFlood(handoverRef.current.real ? 1 : 0);
+      },
       travel: () => undefined,
-      surface: () => move(cityCamera(realmSlug), 2400),
+      surface: () => {
+        const flying = move(cityCamera(realmSlug), 2400);
+        if (!handoverRef.current.real) return flying;
+        return Promise.all([flying, handoverRef.current.flood(1, 0, 2400)]).then(() => undefined);
+      },
     }),
     [cityCamera, move, realmSlug],
   );
@@ -286,13 +338,31 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
 
   return (
     <div className="overland overland-in-town sketch" data-look={options.look} data-reveal={options.reveal} data-testid="sketch">
-      <div className="sketch-world" data-map-phase={state.phase} data-testid="sketch-world" ref={(element) => {
+      <div
+        className="sketch-world"
+        data-handover={handover.state.phase}
+        data-handover-reason={handover.state.phase === "declined" ? handover.state.reason : undefined}
+        data-map-phase={state.phase}
+        data-testid="sketch-world"
+        ref={(element) => {
           rootRef.current = element;
           setRootElement(element);
         }}>
         <h1 className="sr-only">Kyoto, sketched: {ENTRIES.length} routes</h1>
         <div className="sketch-stage" data-cover-opacity={cover.opacity} inert={!cover.interactive} style={stageStyle}>
           <div className="sketch-map" data-testid="sketch-map" ref={hostRef} role="region" aria-label="Sketched map" />
+          {/* The real city, Google's 3D drawn as the sketch, fading in over the drawn one. */}
+          <div
+            aria-hidden="true"
+            className="sketch-real-layer"
+            data-testid="sketch-real-layer"
+            ref={realLayerRef}
+            style={{
+              opacity: handover.real ? 1 : 0,
+              transition: `opacity ${reducedMotion ? 0 : HANDOVER_FADE_MS}ms ease-in-out`,
+              visibility: handover.state.phase === "drawn" || handover.state.phase === "declined" ? "hidden" : undefined,
+            }}
+          />
           {options.look === "pencil" ? <div aria-hidden="true" className="sketch-grain" /> : null}
         </div>
 

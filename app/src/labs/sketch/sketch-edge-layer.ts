@@ -295,6 +295,8 @@ export function createEdgeLayer({
   let routeData: { key: string; segments: Float32Array } | null = null;
   let routeDrawing: { key: string; count: number; vao: WebGLVertexArrayObject; buffer: WebGLBuffer } | null = null;
   let routeDirty = false;
+  // Hidden under the real city: nothing to draw.
+  let paused = false;
 
   const want = () => {
     if (!map || !worker || map.getZoom() < TILE_MIN_ZOOM) return [];
@@ -455,7 +457,7 @@ export function createEdgeLayer({
 
   const onMove = () => request();
 
-  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; stats(): EdgeStats } = {
+  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; stats(): EdgeStats } = {
     id: "building-edges",
     type: "custom",
     renderingMode: "3d",
@@ -502,7 +504,7 @@ export function createEdgeLayer({
       gl = null;
     },
     render(context, options: CustomRenderMethodInput) {
-      if (!map || !program || !faceProgram || !gl) return;
+      if (!map || !program || !faceProgram || !gl || paused) return;
       const zoom = map.getZoom();
       if (zoom < FACE_MIN_ZOOM) return;
       const g = context as WebGL2RenderingContext;
@@ -591,6 +593,10 @@ export function createEdgeLayer({
     },
     setLook(next) {
       stroke = STROKE[next];
+      map?.triggerRepaint();
+    },
+    setPaused(next: boolean) {
+      paused = next;
       map?.triggerRepaint();
     },
     /** A new reveal: every tile near the camera is made again for it. */

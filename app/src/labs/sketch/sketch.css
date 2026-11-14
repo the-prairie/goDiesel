@@ -45,6 +45,30 @@
   outline-offset: -4px;
 }
 
+/* The real city: Google's 3D drawn as the sketch, over the drawn city. The
+   camera is MapLibre's, so the layer takes no input itself. */
+.sketch-real-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sketch-real-layer .cesium-viewer,
+.sketch-real-layer .cesium-widget {
+  position: absolute;
+  inset: 0;
+}
+
+/* Google's logo and data line, unstyled and uncovered, sit just above
+   OpenStreetMap's credit. Only the band behind them is ours: Cesium draws
+   Google's logo light, for a photograph, and on paper it would vanish. */
+.sketch-real-layer .cesium-viewer-bottom {
+  bottom: var(--sk-credit, 24px);
+  background: rgba(20, 20, 22, 0.78);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+
 /* Paper grain for the pencil look: a fixed fibre texture, multiplied in. */
 .sketch-grain {
   position: absolute;
@@ -168,7 +192,7 @@
   left: var(--sk-left);
   right: var(--sk-right);
   /* Above the map's credit, which is always shown in full. */
-  bottom: calc(var(--sk-credit, 24px) + 8px);
+  bottom: calc(var(--sk-credit, 24px) + var(--sk-credit-real, 0px) + 8px);
   display: flex;
   align-items: flex-end;
   gap: var(--sk-gap);

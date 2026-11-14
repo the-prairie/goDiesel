@@ -345,3 +345,68 @@ this round.
   phone's six tiles come to about 1.5 M triangles: roughly 90 MB of faces and
   40 MB of edges. That is the phone risk.
 - **Bundle.** The sketch's chunks come to 54.3 KiB; budget raised to 60 KiB.
+
+## Round 3: the hand-over, built (S17)
+
+**S18. How it is built.**
+- **Lifecycle.** `sketch-handover-state.ts` is a pure reducer with phases
+  drawn → loading → fadingIn → real → fadingOut → drawn, and declined. It
+  is registered as `sketch-handover`.
+  - It enters at zoom 14.5 and leaves below 14, so it never flickers at the
+    edge.
+  - A declined city is tried again only after the camera has left it.
+  - An answer from an abandoned load is ignored.
+- **Conditions.**
+  - Coverage comes from `app/src/data/photoreal-coverage.ts`, an authored
+    list kept with the route data. It holds Kyoto and the height of its
+    streets above the ellipsoid.
+  - The device needs WebGL2 and at least 4 GB of memory where the browser
+    reports it, and must not be saving data.
+  - The first view must arrive within 8 s.
+- **Camera.** MapLibre stays the master; Cesium takes no input.
+  `sketch-camera-match.ts` turns MapLibre's centre, zoom, pitch and bearing
+  into a Cesium position. It uses MapLibre's own field of view, given to
+  Cesium as vertical on a portrait screen and as the wider horizontal one
+  on a landscape screen. Every MapLibre move sets the Cesium camera.
+- **The real view.** `sketch-real-view.ts` and Cesium are loaded lazily,
+  only when a hand-over starts. Cesium is the 4 MB chunk shared with Atlas,
+  never in the first load.
+  - Maximum screen-space error is 24: a sketch needs less detail than a
+    photograph. At 16 the first view at 1440 missed the 8 s limit.
+  - The first view counts once at least 24 tiles have loaded and no more
+    than 6 are pending, with none processing. The last tiles fill in under
+    the fade.
+  - Teardown destroys the Cesium viewer (and with it the tileset and its
+    GPU memory), empties the layer and drops every reference.
+- **Line quality.** One-pixel outlines, inked on the near side of a depth
+  jump only; creases only within about 2 km; photo-edge detail weak and only
+  within about 350 m.
+- **Corridor.** Both sketches use the same reveal radius
+  (`REVEAL_RADIUS_M`), and the wash fades in both.
+- **The jump.** From the real city, the dive flies MapLibre's camera (Cesium
+  follows) while the colour floods 0 → 1 over the same 2.8 s, then hands
+  over to the replay. Coming back floods 1 → 0. With reduced motion it
+  cuts.
+- **Attribution.**
+  - Google's logo and data line come from Cesium, unaltered and uncovered.
+  - They sit just above OpenStreetMap's credit line, and the page's keys sit
+    above both.
+  - The dark band behind them is ours. Cesium draws Google's logo light, for
+    photographs; on paper it would fail Google's contrast requirement.
+- The spike page now draws through the same view.
+
+**Round 3 results.** Measured on the production build, Chrome on this Mac,
+Kyoto at zoom 16.4 and 58° tilt.
+
+| | 375×812 | 1440×900 |
+|---|---|---|
+| Time to first view, from the start of loading to the fade (timed in the page) | 4.7 s | 6.5 s |
+| Google 3D tiles for the hand-over | 232 requests, 14.7 MB | 394 requests, 29.5 MB |
+| Real city's tileset memory | 95 MB | 181 MB |
+
+- An earlier run at 1440 with screen-space error 16 timed out and was
+  declined, so the drawn city stayed: the fallback works, and is why 24 was
+  chosen.
+- After teardown the real layer is empty and the view is gone. The JS heap
+  hardly moves, because tile data lives outside it. Whole-browser resident
+  memory was too noisy on macOS to measure the freed memory.

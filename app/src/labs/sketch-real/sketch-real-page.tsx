@@ -1,26 +1,15 @@
-// SPIKE (lab only, not a feature, not linked from anywhere): can the sketch
-// BE the real city? Google's Photorealistic 3D Tiles, rendered by our own
-// Cesium, drawn as a line drawing by a post-process shader, with a reveal
-// to the real colour. Whether Google's Map Tiles policies allow a
-// non-photorealistic shader over their tiles is UNVERIFIED: see
-// docs/plans/2026-11-13-sketch-world.md before anything like this leaves the lab.
+// SPIKE (lab only, not linked from anywhere): Google's Photorealistic 3D
+// Tiles drawn as the sketch, with a reveal to the real colour, near the
+// start of route 064. It now draws through the same view the sketch world
+// hands over to (sketch-real-view); the owner reports Google allows the
+// shader (see docs/plans/2026-11-13-sketch-world.md).
 
 import { useEffect, useRef, useState } from "react";
-import {
-  Cartesian2,
-  Cartesian3,
-  Math as CesiumMath,
-  Matrix4,
-  PostProcessStage,
-  Transforms,
-  Viewer,
-  createGooglePhotorealistic3DTileset,
-  type Cesium3DTileset,
-} from "cesium";
-import "cesium/Build/Cesium/Widgets/widgets.css";
 
 import { routes } from "@/data/routes";
-import { MAX_ROUTE_POINTS, SKETCH_REAL_SHADER } from "@/labs/sketch-real/sketch-real-shader";
+import type { CesiumCameraPose } from "@/labs/sketch/sketch-camera-match";
+import type { RealSketchView } from "@/labs/sketch/sketch-real-view";
+import { REVEAL_RADIUS_M } from "@/labs/sketch/sketch-reveal";
 import "./sketch-real.css";
 
 const SLUG = "17636880071";
@@ -39,23 +28,25 @@ interface Stats {
 
 declare global {
   interface Window {
-    __sketchReal?: { viewer: Viewer; tileset: Cesium3DTileset; stats(): Stats; setView(view: View): void };
+    __sketchReal?: { stats(): Stats; setView(view: View): void };
   }
 }
 
-/** Camera for a view near the start of route 064, looking along it. */
-function cameraFor(viewer: Viewer, view: View) {
+/** A camera near the start of route 064, standing back against the way it goes. */
+function poseFor(view: View, width: number, height: number): CesiumCameraPose {
   const ahead = TRACE[2];
   const heading = Math.atan2((ahead.lng - START.lng) * Math.cos((START.lat * Math.PI) / 180), ahead.lat - START.lat);
-  // Stand back from the start, against the way the route goes.
   const back = view === "street" ? 0.0016 : 0.006;
-  const lat = START.lat - Math.cos(heading) * back;
-  const lng = START.lng - (Math.sin(heading) * back) / Math.cos((START.lat * Math.PI) / 180);
-  viewer.camera.setView({
-    // Heights above the ellipsoid: Kyoto's streets sit near 90 m on it.
-    destination: Cartesian3.fromDegrees(lng, lat, view === "street" ? 150 : 700),
-    orientation: { heading, pitch: CesiumMath.toRadians(view === "street" ? -18 : -38), roll: 0 },
-  });
+  const fov = 36.87;
+  return {
+    lat: START.lat - Math.cos(heading) * back,
+    lng: START.lng - (Math.sin(heading) * back) / Math.cos((START.lat * Math.PI) / 180),
+    // Heights above the ellipsoid: Kyoto's streets sit near 70 m on it.
+    heightM: view === "street" ? 150 : 700,
+    headingDeg: (heading * 180) / Math.PI,
+    pitchDeg: view === "street" ? -18 : -38,
+    fovDeg: width > height ? (2 * Math.atan(Math.tan((fov * Math.PI) / 360) * (width / height)) * 180) / Math.PI : fov,
+  };
 }
 
 /** Tile traffic this session, from the browser's own resource timing (no URLs kept). */
@@ -72,11 +63,10 @@ function tileTraffic() {
 
 export function SketchRealPage() {
   const host = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<RealSketchView | null>(null);
   const [reveal, setReveal] = useState(0);
   const [corridor, setCorridor] = useState(false);
   const [status, setStatus] = useState("Loading Google's 3D city");
-  const uniforms = useRef({ reveal: 0, corridor: 0 });
-  uniforms.current = { reveal: reveal / 100, corridor: corridor ? 1 : 0 };
 
   useEffect(() => {
     const container = host.current;
@@ -89,96 +79,47 @@ export function SketchRealPage() {
     const started = performance.now();
     let firstCompleteMs: number | null = null;
     let disposed = false;
-    const viewer = new Viewer(container, {
-      animation: false,
-      baseLayer: false,
-      baseLayerPicker: false,
-      fullscreenButton: false,
-      geocoder: false,
-      homeButton: false,
-      infoBox: false,
-      navigationHelpButton: false,
-      sceneModePicker: false,
-      selectionIndicator: false,
-      timeline: false,
-      requestRenderMode: false,
-      contextOptions: { webgl: { preserveDrawingBuffer: true } },
-    });
-    viewer.scene.globe.show = false;
-    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
-    if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
-    viewer.scene.fog.enabled = false;
-    cameraFor(viewer, new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("view") === "aerial" ? "aerial" : "street");
-
-    // The route on the ground plane around its start, in metres, east and north.
-    const local = Transforms.eastNorthUpToFixedFrame(Cartesian3.fromDegrees(START.lng, START.lat, 0));
-    const toLocal = Matrix4.inverseTransformation(local, new Matrix4());
-    const step = Math.max(1, Math.ceil(TRACE.length / MAX_ROUTE_POINTS));
-    const routeLocal = TRACE.filter((_, index) => index % step === 0)
-      .slice(0, MAX_ROUTE_POINTS)
-      .map((point) => {
-        const p = Matrix4.multiplyByPoint(toLocal, Cartesian3.fromDegrees(point.lng, point.lat, 0), new Cartesian3());
-        return new Cartesian2(p.x, p.y);
-      });
-    while (routeLocal.length < MAX_ROUTE_POINTS) routeLocal.push(new Cartesian2(0, 0));
-    const eyeToLocal = new Matrix4();
-    const stage = new PostProcessStage({
-      fragmentShader: SKETCH_REAL_SHADER,
-      uniforms: {
-        u_reveal: () => uniforms.current.reveal,
-        u_corridor: () => uniforms.current.corridor,
-        u_radius: () => 70,
-        u_detail: () => 1,
-        u_routeCount: () => Math.min(MAX_ROUTE_POINTS, Math.ceil(TRACE.length / step)),
-        u_route: () => routeLocal,
-        u_eyeToLocal: () => Matrix4.multiply(toLocal, viewer.camera.inverseViewMatrix, eyeToLocal),
-      },
-    });
-    viewer.scene.postProcessStages.add(stage);
-
-    let tileset: Cesium3DTileset | undefined;
-    createGooglePhotorealistic3DTileset(
-      { key, onlyUsingWithGoogleGeocoder: true },
-      {
-        // The Google logo and the data attributions from the tiles, on screen.
-        showCreditsOnScreen: true,
-        maximumScreenSpaceError: 16,
-        // Modest memory: one neighbourhood, nothing kept beyond this session.
-        cacheBytes: 384 * 1024 * 1024,
-        maximumCacheOverflowBytes: 128 * 1024 * 1024,
-      },
-    )
-      .then((loaded) => {
-        if (disposed) return;
-        tileset = loaded;
-        viewer.scene.primitives.add(loaded);
-        loaded.allTilesLoaded.addEventListener(() => {
-          if (firstCompleteMs === null) firstCompleteMs = Math.round(performance.now() - started);
+    const view = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("view") === "aerial" ? "aerial" : "street";
+    void import("@/labs/sketch/sketch-real-view").then(({ createRealSketchView }) => {
+      if (disposed) return;
+      const real = createRealSketchView({
+        container,
+        apiKey: key,
+        lines: [TRACE.map((point): [number, number] => [point.lng, point.lat])],
+        radiusM: 0,
+        soft: false,
+        paper: [0.984, 0.984, 0.973],
+        ink: [0.114, 0.114, 0.122],
+        maximumScreenSpaceError: container.clientWidth < 768 ? 24 : 16,
+        onFirstView: () => {
+          firstCompleteMs = Math.round(performance.now() - started);
           setStatus("");
-        });
-        window.__sketchReal = {
-          viewer,
-          tileset: loaded,
-          stats: () => ({
-            firstCompleteMs,
-            ...tileTraffic(),
-            tilesetBytes: loaded.totalMemoryUsageInBytes,
-            heapBytes: (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null,
-          }),
-          setView: (view) => cameraFor(viewer, view),
-        };
-      })
-      .catch(() => {
-        if (!disposed) setStatus("Google's 3D tiles could not load.");
+        },
+        onFailed: () => setStatus("Google's 3D tiles could not load."),
       });
-
+      viewRef.current = real;
+      const place = (next: View) => real.setCamera(poseFor(next, container.clientWidth, container.clientHeight));
+      place(view);
+      window.__sketchReal = {
+        stats: () => ({
+          firstCompleteMs,
+          ...tileTraffic(),
+          tilesetBytes: real.stats().tilesetBytes,
+          heapBytes: (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null,
+        }),
+        setView: place,
+      };
+    });
     return () => {
       disposed = true;
       delete window.__sketchReal;
-      viewer.destroy();
-      void tileset;
+      viewRef.current?.destroy();
+      viewRef.current = null;
     };
   }, []);
+
+  useEffect(() => viewRef.current?.setFlood(reveal / 100), [reveal]);
+  useEffect(() => viewRef.current?.setCorridor(corridor ? REVEAL_RADIUS_M.corridor : 0, false), [corridor]);
 
   return (
     <div className="sketch-real" data-testid="sketch-real">
