@@ -23,6 +23,7 @@ import { sketchOptions, withOption, type SketchLook } from "@/labs/sketch/sketch
 import { REVEAL_LAYERS } from "@/labs/sketch/sketch-tile";
 import { REVEAL_RADIUS_M, exploredRoutes, type RevealMode } from "@/labs/sketch/sketch-reveal";
 import { sketchStyle } from "@/labs/sketch/sketch-style";
+import { googleWarmKey, readDataSaving, shouldWarmGoogle, warmGoogle } from "@/labs/sketch/sketch-warmup";
 import { HANDOVER_FADE_MS, useSketchHandover } from "@/labs/sketch/use-sketch-handover";
 import { MAPLIBRE_FOV_DEG } from "@/labs/sketch/sketch-camera-match";
 import { fovAlongFlight, mapCameraForReplay } from "@/labs/sketch/sketch-jump-camera";
@@ -98,6 +99,13 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     look: options.look,
     reducedMotion,
   });
+  // Wait 2 (S24): choosing a route warms Google's 3D renderer code, so the
+  // dive overlaps it and the 3D tiles can start as soon as the jump mounts.
+  const mapUp = state.phase === "ready" || state.phase === "degraded";
+  useEffect(() => {
+    const key = googleWarmKey();
+    if (shouldWarmGoogle({ chosen, realmOpen: Boolean(realmSlug), mapReady: mapUp, hasKey: Boolean(key), ...readDataSaving() })) void warmGoogle(key);
+  }, [chosen, realmSlug, mapUp]);
   const handoverRef = useRef(handover);
   handoverRef.current = handover;
   const reducedRef = useRef(reducedMotion);
@@ -137,6 +145,8 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     const start: Camera = realmSlug ? routeStartView(lineOf(realmSlug) ?? EXPLORED[0].line) : back && lineOf(back) ? cityCamera(back) : farView();
     let map: MapLibreMap;
     try {
+      // Timing marks (standard performance marks, cheap): where the opening's time goes.
+      performance.mark("sketch:map-created");
       map = new maplibregl.Map({
         container: host,
         style: styleRef.current,
@@ -155,7 +165,12 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     map.getCanvas().setAttribute("aria-label", "A sketched map of the world, from Japan down to Kyoto's streets. Her routes are drawn in red; the list of routes follows.");
     // Ready once the first view is drawn, tiles and all, not merely styled:
     // until then the page says it is drawing the world.
-    map.once("idle", () => dispatch({ type: "mapReady", loadId }));
+    map.once("idle", () => {
+      performance.mark("sketch:idle");
+      dispatch({ type: "mapReady", loadId });
+    });
+    map.once("load", () => performance.mark("sketch:style-loaded"));
+    map.once("render", () => performance.mark("sketch:first-render"));
     map.on("load", () => {
       const source = map.getSource("openmaptiles") as VectorTileSource | undefined;
       const add = (tilesUrl: string) => {
@@ -189,8 +204,13 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     map.on("error", (event) => {
       if ((event as { sourceId?: string }).sourceId || /tile|source|fetch/i.test(String(event.error?.message))) dispatch({ type: "tilesFailed", loadId });
     });
+    let firstTile = true;
     map.on("data", (event) => {
       const data = event as { dataType?: string; sourceId?: string; tile?: unknown };
+      if (firstTile && data.dataType === "source" && data.sourceId === "openmaptiles" && data.tile) {
+        firstTile = false;
+        performance.mark("sketch:first-tile");
+      }
       if (data.dataType === "source" && data.sourceId === "openmaptiles" && data.tile) dispatch({ type: "tilesLoaded", loadId });
     });
     // Everything at the bottom sits above the credit, however many lines it takes.

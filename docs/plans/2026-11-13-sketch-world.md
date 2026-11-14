@@ -507,3 +507,49 @@ own colour, unaltered.
 
 The dive itself takes 2.9 s; the rest is Google's map loading behind the
 drawing.
+
+## Round 6: the two waits on a phone
+
+Measured at 375×812 (iPhone user agent, DPR 3) in the bundled Chromium,
+headless and therefore always rendering, with standard performance marks
+(`sketch:map-created`, `first-render`, `first-tile`, `style-loaded`, `idle`,
+`google-warm-start`, `google-warm-done`) and Resource Timing grouped by host.
+Production build on a local preview, and the dev server on 8790 read-only.
+
+**S24. Wait 2: warm Google's renderer when a route is chosen.** On Jump in,
+the Maps script and maps3d library (about 0.3 MB) loaded during the dive, and
+the renderer's main chunk (2.4 MB) and its config only once the Map3DElement
+was in the page; Google's 3D tiles (about 380 requests) started after that and
+ended the wait. Warming the library alone moved nothing (resolving 6.5 and
+7.6 s against 6.3 and 6.7 s without). An unattached Map3DElement fetches only
+about 40 KB. So choosing a route (once the drawing is up, not inside the 3D
+world) now loads the script, the library and a 1 px hidden Map3DElement, kept
+only until the renderer's main chunk arrives (about 1.3 s, 8 s at most) and
+then removed. The second chunk (0.8 MB) is asked for only by a visible scene,
+and holding the hidden element for it ran to the 8 s limit, so it still loads
+on Jump in. Cost of a route chosen and never jumped, once per page: about
+2.7 MB from Google, 2 requests to Google's tile hosts (the key check's root
+and one more), about +2.3 MB of JS heap after collection; no scene is kept and
+nothing more is fetched. Skipped with Save-Data or prefers-reduced-data, and
+without a key. Open question: whether Google counts the hidden element as a
+billed 3D map load.
+
+| Jump in at 375 | Holding from | Resolving (city shows) | Realm |
+|---|---|---|---|
+| Production, no warm (2 runs) | 2.9–3.1 s | 6.3 / 6.7 s | 7.1 / 7.5 s |
+| Production, warmed (3 runs) | 2.9 s | 5.8 / 5.5 / 5.1 s | 6.6 / 6.2 / 5.9 s |
+| 8790, no warm | 3.0 s | 6.1 s | 6.9 s |
+| 8790, warmed | 3.0 s | 5.2 s | 6.0 s |
+
+**S25. Wait 1: measured, not changed.** Unthrottled the opening is drawn
+("idle") at 1.0–1.3 s on both servers, and at 1.6 s with the CPU slowed 4×.
+The 8–14 s seen in the Browser pane is the pane being hidden: a hidden page
+runs no animation frames, so MapLibre never draws. On slow 4G (1.6 Mbps,
+150 ms) with the CPU slowed 4× the opening takes 8.8 s: 4.5 s to download
+about 800 KB of app JavaScript before the map exists (MapLibre 279 KB and all
+route data 195 KB load side by side), then about 4 s of tile index, tiles and
+label glyphs. Fetching the tile index and glyphs beside the page's code was
+tried: MapLibre then read them from the cache, the first tile came 1.1 s
+sooner, but the map was created 0.5 s later and the full drawing was no
+sooner (8.6–8.8 s), so it was removed. What would move it: not loading every
+route's data before the map is made, and a smaller first view.

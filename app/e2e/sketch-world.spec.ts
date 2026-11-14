@@ -92,6 +92,41 @@ test("the review control switches the look and the colour reveal, kept in the li
   await expect(page).toHaveURL(/reveal=wash/);
 });
 
+// Choosing a route starts Google's Maps library loading so the dive overlaps
+// it. The warm probe stands in for loadGoogleMaps + importLibrary("maps3d").
+async function installWarmProbe(page: Page, saveData = false) {
+  await page.addInitScript((save) => {
+    const w = window as unknown as { __GODIESEL_GOOGLE_WARM__: () => Promise<void>; __warmCalls: number };
+    w.__warmCalls = 0;
+    w.__GODIESEL_GOOGLE_WARM__ = async () => { w.__warmCalls += 1; };
+    if (save) Object.defineProperty(navigator, "connection", { value: { saveData: true }, configurable: true });
+  }, saveData);
+}
+const warmCalls = (page: Page) => page.evaluate(() => (window as unknown as { __warmCalls: number }).__warmCalls);
+
+test("choosing a route warms Google's 3D library once, before any jump", async ({ page }) => {
+  await installWarmProbe(page);
+  await stubTiles(page);
+  await page.goto("/#/lab/sketch");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  expect(await warmCalls(page)).toBe(0);
+  await page.locator(`.sketch-chip[data-slug="${PEACH.slug}"]`).click();
+  await expect.poll(() => warmCalls(page)).toBe(1);
+  await page.locator(`.sketch-chip[data-slug="${GOLD.slug}"]`).click();
+  await page.waitForTimeout(300);
+  expect(await warmCalls(page)).toBe(1);
+});
+
+test("with Save-Data on, choosing a route loads nothing from Google until Jump in", async ({ page }) => {
+  await installWarmProbe(page, true);
+  await stubTiles(page);
+  await page.goto("/#/lab/sketch");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  await page.locator(`.sketch-chip[data-slug="${GOLD.slug}"]`).click();
+  await page.waitForTimeout(500);
+  expect(await warmCalls(page)).toBe(0);
+});
+
 test("choosing a route and jumping in hands over to the 3D replay; Back returns to the sketch at that route", async ({ page }) => {
   test.setTimeout(90_000);
   await installGoogleReplay(page, "ready");
