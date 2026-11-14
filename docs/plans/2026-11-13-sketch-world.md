@@ -168,10 +168,13 @@ lines it wraps to (measured, not guessed).
 
 **Status: experiment, not a feature. Not linked from anywhere.**
 
-> **POLICY UNVERIFIED.** Whether Google's Map Tiles API terms allow a
-> non-photorealistic shader over Photorealistic 3D Tiles has NOT been
-> confirmed. Nothing like this may leave the lab until Google (or counsel)
-> confirms it in writing.
+> **POLICY: owner reports yes (13 Nov 2026).** Lauren emailed Google and
+> reports that a non-photorealistic shader over Photorealistic 3D Tiles is
+> allowed. The reply itself is not in the repository and its wording has not
+> been read here, so the exact scope (display-only filter, attribution
+> untouched, nothing stored) is assumed, not quoted. Keep Google's
+> attribution unstyled and uncovered, store nothing derived from the tiles,
+> and quote the reply here once it is to hand.
 
 **What it is.** Google's Photorealistic 3D Tiles are rendered by our own
 Cesium 1.143 (already a dependency; its Google tileset loader and credit
