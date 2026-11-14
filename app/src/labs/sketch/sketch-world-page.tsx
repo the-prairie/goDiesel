@@ -22,7 +22,7 @@ import { createEdgeLayer } from "@/labs/sketch/sketch-edge-layer";
 import { initialSketchMapState, reduceSketchMap } from "@/labs/sketch/sketch-map-state";
 import { sketchOptions, withOption, type SketchLook } from "@/labs/sketch/sketch-options";
 import { REVEAL_LAYERS } from "@/labs/sketch/sketch-tile";
-import { REVEAL_RADIUS_M, exploredRoutes, type RevealMode } from "@/labs/sketch/sketch-reveal";
+import { REVEAL_RADIUS_M, exploredRoutes, withTracks, type ExploredRoute, type RevealMode } from "@/labs/sketch/sketch-reveal";
 import { sketchStyle } from "@/labs/sketch/sketch-style";
 import { googleWarmKey, readDataSaving, shouldWarmGoogle, warmGoogle } from "@/labs/sketch/sketch-warmup";
 import { HANDOVER_FADE_MS, useSketchHandover } from "@/labs/sketch/use-sketch-handover";
@@ -71,7 +71,7 @@ function atlasOf(slug: string | null): AtlasState {
 }
 
 /** What the tiles are searched for: her routes and how far colour reaches. */
-const revealFor = (mode: RevealMode) => ({ lines: EXPLORED.map((route) => route.line), radiusM: REVEAL_RADIUS_M[mode], fade: mode === "wash" });
+const revealFor = (mode: RevealMode, explored: readonly ExploredRoute[]) => ({ lines: explored.map((route) => route.line), radiusM: REVEAL_RADIUS_M[mode], fade: mode === "wash" });
 
 /** The pose the 3D replay opens with, read from the same functions its driver uses. */
 /**
@@ -138,6 +138,11 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     sendAtlas({ type: "placeChosen", country: next.country, place: next.place });
     sendAtlas({ type: "routeChosen", slug: chosen });
   }, [chosen]);
+  // Her routes as drawn: each place's full tracks once loaded, the summaries until then.
+  const [tracks, setTracks] = useState<ReadonlyMap<string, readonly [number, number][]>>(() => new Map());
+  const explored = useMemo(() => withTracks(EXPLORED, tracks), [tracks]);
+  const exploredRef = useRef(explored);
+  exploredRef.current = explored;
   const styleRef = useRef(sketchStyle({ look: options.look, reveal: options.reveal, explored: EXPLORED }));
   const [jumpCoverState, setCover] = useState<TownCover>(() => townCover(initialOverlandJumpState()));
   const cover = realmSlug ? jumpCoverState : townCover(initialOverlandJumpState());
@@ -149,7 +154,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     mapReady: state.phase === "ready" || state.phase === "degraded",
     enabled: options.realCity,
     paused: Boolean(realmSlug),
-    explored: EXPLORED,
+    explored,
     reveal: options.reveal,
     look: options.look,
     reducedMotion,
@@ -188,8 +193,11 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     edges.setRoutes(linesOf(slugs));
     let cancelled = false;
     void Promise.all(slugs.map((slug) => loadRouteDetail(slug))).then((results) => {
-      const lines = results.flatMap((result) => (result.status === "ready" && result.route.route.length > 1 ? [result.route.route.map((point): [number, number] => [point.lng, point.lat])] : []));
-      if (!cancelled && lines.length && edgesRef.current === edges) edges.setRoutes(lines);
+      const loaded = results.flatMap((result, index) => (result.status === "ready" && result.route.route.length > 1 ? [[slugs[index], result.route.route.map((point): [number, number] => [point.lng, point.lat])] as const] : []));
+      if (cancelled || !loaded.length) return;
+      if (edgesRef.current === edges) edges.setRoutes(loaded.map(([, line]) => line));
+      // The red line, the corridor and the colour then follow the real track too.
+      setTracks((previous) => (loaded.every(([slug]) => previous.has(slug)) ? previous : new Map([...previous, ...loaded])));
     });
     return () => {
       cancelled = true;
@@ -291,7 +299,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
         try {
           map.addLayer(edges, "route-casing");
           edgesRef.current = edges;
-          edges.setReveal(revealFor(revealRef.current));
+          edges.setReveal(revealFor(revealRef.current, exploredRef.current));
           setEdgesReady(true);
         } catch {
           if (map.getLayer("building-edges")) map.removeLayer("building-edges");
@@ -351,11 +359,15 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     const map = mapRef.current;
     if (!map || !edgesRef.current) return;
     for (const layer of REVEAL_LAYERS) map.removeFeatureState({ source: "openmaptiles", sourceLayer: layer });
-    edgesRef.current.setReveal(revealFor(options.reveal));
+    edgesRef.current.setReveal(revealFor(options.reveal, exploredRef.current));
   }, [options.reveal]);
+  // A place's full tracks arrived: the colour follows them, keeping what is already shown (no flash to grey).
+  useEffect(() => {
+    if (explored !== EXPLORED) edgesRef.current?.setReveal(revealFor(revealRef.current, explored));
+  }, [explored]);
   useEffect(() => {
     const map = mapRef.current;
-    const next = sketchStyle({ look: options.look, reveal: options.reveal, explored: EXPLORED });
+    const next = sketchStyle({ look: options.look, reveal: options.reveal, explored });
     const previous = styleRef.current;
     styleRef.current = next;
     edgesRef.current?.setLook(options.look);
@@ -372,7 +384,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
       next,
       previous,
     );
-  }, [options.look, options.reveal]);
+  }, [options.look, options.reveal, explored]);
 
   // With the real city up, the keys sit above Google's credit line too.
   useEffect(() => {

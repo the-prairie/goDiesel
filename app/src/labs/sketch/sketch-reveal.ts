@@ -126,3 +126,16 @@ export function linesNearTile<T extends readonly LngLat[]>(lines: readonly T[], 
     return e >= west - dLng && w <= east + dLng && nn >= south - dLat && s <= north + dLat;
   });
 }
+
+/**
+ * Her routes with each loaded full track in place of its 96-point summary:
+ * the line, the corridor and the reveal are all drawn from these, so they
+ * agree. Until a track loads its summary stands in.
+ */
+export function withTracks<T extends { slug: string; line: readonly LngLat[] }>(routes: readonly T[], tracks: ReadonlyMap<string, readonly LngLat[]>): readonly T[] {
+  if (tracks.size === 0) return routes;
+  return routes.map((route) => {
+    const track = tracks.get(route.slug);
+    return track && track.length > 1 ? { ...route, line: track } : route;
+  });
+}

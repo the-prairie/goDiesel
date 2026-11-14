@@ -417,8 +417,14 @@ export function createEdgeLayer({
   const receive = (event: MessageEvent<EdgeResponse>) => {
     const message = event.data;
     if (pending.get(message.key) !== undefined && !("error" in message) && message.version !== version && reveal) {
-      // An answer for an older reveal: ask again.
+      // An answer for an older reveal (her full tracks arrived meanwhile):
+      // its buildings are right and its colour nearly so, so it is drawn now,
+      // and asked for again to be replaced in place. Dropping it left the
+      // dive's landing empty.
       pending.delete(message.key);
+      tops.set(message.key, { tops: message.tops, extent: message.extent });
+      arrived.push({ key: message.key, edges: message.edges, faces: message.faces, extent: message.extent, version: message.version });
+      map?.triggerRepaint();
       request();
       return;
     }

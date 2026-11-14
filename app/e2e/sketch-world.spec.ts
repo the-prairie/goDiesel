@@ -115,6 +115,22 @@ for (const width of [402, 360]) {
   });
 }
 
+test("in a place, her route lines follow the full tracks once they load, not the 96-point summaries", async ({ page }) => {
+  await stubTiles(page);
+  await page.goto(`/#/lab/sketch?route=${GOLD.slug}`);
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  const points = () =>
+    page.evaluate((slug) => {
+      const map = (window as unknown as { __sketch: { map: { getSource(id: string): { serialize(): { data: { features: { properties: { slug: string }; geometry: { coordinates: unknown[] } }[] } } } | undefined } } }).__sketch.map;
+      const data = map.getSource("sketch-routes")?.serialize().data;
+      return data?.features.find((feature) => feature.properties.slug === slug)?.geometry.coordinates.length ?? 0;
+    }, GOLD.slug);
+  await expect.poll(points, { timeout: 15_000 }).toBeGreaterThan(96);
+  // The corridor is drawn from the same track.
+  const corridor = await page.evaluate(() => (window as unknown as { __sketch: { map: { getSource(id: string): { serialize(): { data: { geometry: { coordinates: unknown[] } } } } } } }).__sketch.map.getSource("sketch-corridor").serialize().data.geometry.coordinates.length);
+  expect(corridor).toBeGreaterThan(96);
+});
+
 test("says it is drawing the world until the first view is drawn, on a slow connection", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await stubTiles(page, "empty", 2500);

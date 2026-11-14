@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { routes } from "@/data/routes";
-import { REVEAL_RADIUS_M, corridorPolygons, exploredRoutes, lineBoxes, linesNearTile, metresBetween, samplePoints, type LngLat } from "@/labs/sketch/sketch-reveal";
+import { REVEAL_RADIUS_M, corridorPolygons, exploredRoutes, lineBoxes, linesNearTile, metresBetween, samplePoints, withTracks, type LngLat } from "@/labs/sketch/sketch-reveal";
 
 const KYOTO = ["17636880071", "17654151284"];
 
@@ -112,5 +112,24 @@ describe("the routes a tile needs", () => {
     const beside: LngLat[] = [[westEdge - offset, 34.98], [westEdge - offset, 34.985]];
     expect(linesNearTile([beside], lineBoxes([beside]), { z: 14, x: 14370, y: 6490 }, 200)).toEqual([beside]);
     expect(linesNearTile([beside], lineBoxes([beside]), { z: 14, x: 14370, y: 6490 }, 100)).toEqual([]);
+  });
+});
+
+describe("her routes drawn from their full tracks once loaded", () => {
+  const summary = [
+    { slug: "a", line: [[0, 0], [1, 1]] as LngLat[], by: "owner" as const },
+    { slug: "b", line: [[2, 2], [3, 3]] as LngLat[], by: "owner" as const },
+  ];
+
+  it("swaps in a loaded track and keeps the summary as the stand-in for the rest", () => {
+    const track: LngLat[] = [[0, 0], [0.4, 0.6], [0.7, 0.8], [1, 1]];
+    const lines = withTracks(summary, new Map([["a", track]]));
+    expect(lines.map((route) => route.line)).toEqual([track, summary[1].line]);
+    expect(lines[0]).toMatchObject({ slug: "a", by: "owner" });
+  });
+
+  it("keeps the same list when nothing has loaded, and ignores a track too short to draw", () => {
+    expect(withTracks(summary, new Map())).toBe(summary);
+    expect(withTracks(summary, new Map([["a", [[0, 0]] as LngLat[]]]))[0].line).toBe(summary[0].line);
   });
 });
