@@ -7,6 +7,43 @@ export const APP_PATHS = {
 } as const;
 
 export const PLAYABLE_EARTH_LAB_PATH = "/lab/playable-earth";
+export const OVERLAND_LAB_PATH = "/lab/overland";
+
+export type OverlandView = "map" | "index";
+
+/** The Overland world map, or its index, optionally at one town. */
+export function overlandWorldPath(options: { town?: string; view?: OverlandView } = {}) {
+  const query = new URLSearchParams();
+  if (options.town) query.set("town", options.town);
+  if (options.view === "index") query.set("view", "index");
+  const search = query.toString();
+  return search ? `${OVERLAND_LAB_PATH}?${search}` : OVERLAND_LAB_PATH;
+}
+
+/** One route's entry in the Overland lab. */
+export function overlandEntryPath(slug: string) {
+  return `${OVERLAND_LAB_PATH}/${encodeURIComponent(slug)}`;
+}
+
+/**
+ * One route's 3D world, jumped into from its entry. `live` selects the
+ * live pixelation, kept for local comparison; the wipe is the default.
+ */
+export function overlandRealmPath(slug: string, transition: "wipe" | "live" = "wipe") {
+  const path = `${overlandEntryPath(slug)}/3d`;
+  return transition === "live" ? `${path}?jump=live` : path;
+}
+
+/** One of her places as a 3D town, optionally with one signpost chosen. */
+export function overlandTownPath(townSlug: string, sign?: string) {
+  const path = `${OVERLAND_LAB_PATH}/town/${encodeURIComponent(townSlug)}`;
+  return sign ? `${path}?${new URLSearchParams({ sign })}` : path;
+}
+
+/** A route's 3D world, jumped into from its signpost in a town. */
+export function overlandTownRealmPath(townSlug: string, routeSlug: string) {
+  return `${OVERLAND_LAB_PATH}/town/${encodeURIComponent(townSlug)}/${encodeURIComponent(routeSlug)}/3d`;
+}
 
 function encodedSlug(slug: string) {
   return encodeURIComponent(slug);

@@ -44,6 +44,11 @@ interface MountOptions {
     width: number;
   };
   headingSmoothing?: number;
+  /**
+   * Dresses the immersive position marker in place of the default dot or
+   * photo, and returns what undresses it. The engine still places it.
+   */
+  positionMarker?: (marker: HTMLElement) => () => void;
 }
 
 export interface GoogleRouteNavigatorEngine {
@@ -154,6 +159,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
     onStatus,
     routeStyle,
     headingSmoothing,
+    positionMarker = attachRoutePositionMarker,
   }: MountOptions) {
     this.destroy();
     const { operationId } = this.transition({ type: "mountStarted" }, onStatus);
@@ -238,7 +244,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
             anchorTop: "-50%",
             title: "Current route position",
           });
-          this.disposeMarker = attachRoutePositionMarker(marker);
+          this.disposeMarker = positionMarker(marker);
           marker.style.pointerEvents = "none";
           marker.dataset.testid = "replay-position-marker";
           map.append(marker);

@@ -1,0 +1,997 @@
+/* The Overland lab: a handheld device around a pixel screen. Scoped to
+   .overland so nothing reaches the rest of the app. */
+
+.overland,
+.overland-jump,
+.overland-jump-status-layer {
+  --ov-ink: #1d2433;
+  --ov-ink-2: #3a4560;
+  --ov-shell: #f3f4f0;
+  --ov-shell-2: #e2e5df;
+  --ov-glass: #171c24;
+  --ov-key: #c8402b;
+  --ov-key-hi: #e3634c;
+  --ov-key-lo: #962a1b;
+  --ov-focus: #e8503a;
+  --ov-scale: 2;
+}
+
+.overland {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-map-controls);
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: calc(16px + var(--safe-area-top, 0px)) calc(16px + var(--safe-area-right, 0px))
+    calc(16px + var(--safe-area-bottom, 0px)) calc(16px + var(--safe-area-left, 0px));
+  background: linear-gradient(180deg, #cfe2e4 0%, #dde5e2 30%, #ece3dc 70%, #f1dccf 100%);
+  color: var(--ov-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 767px) {
+  .overland {
+    bottom: var(--mobile-navigation-height, 0px);
+  }
+}
+
+@media (min-width: 768px) {
+  .overland {
+    left: var(--spine-rail-width, 0px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .overland {
+    left: var(--spine-width, 0px);
+  }
+}
+
+@supports (color: color(display-p3 1 0 0)) {
+  .overland,
+  .overland-jump,
+  .overland-jump-status-layer {
+    --ov-key: color(display-p3 0.75 0.27 0.18);
+    --ov-key-hi: color(display-p3 0.88 0.4 0.3);
+    --ov-key-lo: color(display-p3 0.56 0.17 0.1);
+  }
+}
+
+.overland-device {
+  position: relative;
+  border-radius: 34px;
+  padding: 20px;
+  background: linear-gradient(180deg, #fbfbf8 0%, var(--ov-shell) 40%, var(--ov-shell-2) 100%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -2px 0 rgba(40, 50, 70, 0.08),
+    0 1px 2px rgba(40, 50, 70, 0.12),
+    0 12px 24px -10px rgba(40, 50, 70, 0.28),
+    0 40px 70px -30px rgba(40, 50, 70, 0.35);
+}
+
+@media (max-width: 480px) {
+  .overland {
+    padding-left: calc(8px + var(--safe-area-left, 0px));
+    padding-right: calc(8px + var(--safe-area-right, 0px));
+  }
+  .overland-device {
+    border-radius: 26px;
+    padding: 14px;
+  }
+}
+
+.overland-glass {
+  position: relative;
+  border-radius: 18px;
+  padding: 8px;
+  background: var(--ov-glass);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.overland-screen {
+  position: relative;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #0c0f14;
+}
+
+.overland-pixels,
+.overland-screen canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.overland-screen > canvas {
+  touch-action: none;
+  outline: none;
+}
+
+.overland-screen > canvas.overland-pan {
+  cursor: grab;
+}
+
+.overland-screen > canvas.overland-pan:active {
+  cursor: grabbing;
+}
+
+.overland-view {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.overland-towns {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.overland-town {
+  position: absolute;
+  pointer-events: auto;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+
+.overland-hit {
+  position: absolute;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.overland-index {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  background: #f8f6ee;
+}
+
+.overland-index::-webkit-scrollbar {
+  display: none;
+}
+
+.overland-index ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overland-row {
+  display: block;
+  width: 100%;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.overland-keys {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.overland-key-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overland-key {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  min-width: 48px;
+  height: 48px;
+  padding: 0 16px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #ffffff 0%, #eef0ec 55%, #e1e4de 100%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(40, 50, 70, 0.1),
+    0 3px 0 #cbd0c9,
+    0 4px 1px rgba(40, 50, 70, 0.1),
+    0 8px 14px -6px rgba(40, 50, 70, 0.35);
+  transition:
+    transform 110ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 110ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.overland-key:active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(40, 50, 70, 0.1),
+    0 0 0 #cbd0c9,
+    0 1px 1px rgba(40, 50, 70, 0.12),
+    0 2px 4px -2px rgba(40, 50, 70, 0.3);
+}
+
+.overland-key-square {
+  width: 48px;
+  padding: 0;
+}
+
+.overland-key-primary {
+  width: 60px;
+  height: 60px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: radial-gradient(120% 100% at 35% 22%, var(--ov-key-hi) 0%, var(--ov-key) 42%, var(--ov-key-lo) 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 2px rgba(0, 0, 0, 0.18),
+    0 3px 0 #9a2f20,
+    0 10px 16px -6px rgba(178, 56, 38, 0.55);
+}
+
+.overland-key-primary:active {
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 #9a2f20,
+    0 2px 4px -2px rgba(178, 56, 38, 0.6);
+}
+
+.overland-segment {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 18px;
+  background: rgba(40, 50, 70, 0.07);
+  box-shadow: inset 0 1px 2px rgba(40, 50, 70, 0.12);
+}
+
+.overland-segment .overland-key {
+  height: 44px;
+  min-width: 56px;
+  padding: 0 12px;
+}
+
+.overland-segment .overland-key[aria-pressed="false"] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.overland-key:focus-visible,
+.overland-town:focus-visible,
+.overland-row:focus-visible,
+.overland-hit:focus-visible,
+.overland-screen > canvas:focus-visible {
+  outline: 3px solid var(--ov-focus);
+  outline-offset: 3px;
+}
+
+.overland-row:focus-visible {
+  outline-offset: -3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overland-key,
+  .overland-key:active {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------- the jump
+   Our pixel cover over Google's 3D map. The map element and its attribution
+   are never scaled, filtered or covered: the cover leaves the attribution
+   corners clear whenever the map shows, and the realm's text box and
+   controls sit above the attribution band. */
+
+.overland-jump {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  overflow: hidden;
+  contain: strict;
+  color: var(--ov-ink);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.overland-jump-live {
+  background: #0c0f14;
+}
+
+.overland-jump-fade-in {
+  animation: overland-fade-in 200ms linear both;
+}
+
+@keyframes overland-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.overland-jump-cover {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  transform-origin: 0 0;
+  will-change: transform, clip-path;
+  pointer-events: none;
+}
+
+.overland-jump-cover[hidden] {
+  display: none;
+}
+
+.overland-realm-map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.overland-realm-host {
+  width: 100%;
+  height: 100%;
+}
+
+.overland-realm-text-box,
+.overland-realm-controls,
+.overland-jump-status {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  animation: overland-rise 240ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@keyframes overland-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.overland-realm-text-box {
+  pointer-events: none;
+  filter: drop-shadow(0 8px 18px rgba(10, 14, 22, 0.35));
+}
+
+.overland-realm-controls,
+.overland-jump-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #fbfbf8 0%, var(--ov-shell) 45%, var(--ov-shell-2) 100%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -2px 0 rgba(40, 50, 70, 0.08),
+    0 1px 2px rgba(10, 14, 22, 0.2),
+    0 14px 30px -12px rgba(10, 14, 22, 0.55);
+}
+
+.overland-realm-controls .overland-key,
+.overland-jump-status .overland-key {
+  height: 44px;
+  min-width: 56px;
+  flex: none;
+}
+
+.overland-jump-status {
+  justify-content: space-between;
+  padding-left: 18px;
+}
+
+.overland-jump-status-text {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  min-width: 0;
+}
+
+.overland-key.overland-key-play {
+  min-width: 84px;
+  background: radial-gradient(120% 100% at 35% 22%, var(--ov-key-hi) 0%, var(--ov-key) 42%, var(--ov-key-lo) 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -2px 2px rgba(0, 0, 0, 0.18),
+    0 3px 0 #9a2f20,
+    0 8px 14px -6px rgba(178, 56, 38, 0.55);
+}
+
+.overland-key.overland-key-play:active {
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 #9a2f20,
+    0 2px 4px -2px rgba(178, 56, 38, 0.6);
+}
+
+.overland-scrub {
+  --ov-track: #c9cec6;
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  margin: 0 8px 0 4px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.overland-scrub::-webkit-slider-runnable-track {
+  height: 8px;
+  background: linear-gradient(to right, var(--ov-key) var(--ov-progress, 0%), var(--ov-track) var(--ov-progress, 0%));
+  box-shadow: inset 0 0 0 2px var(--ov-ink);
+}
+
+.overland-scrub::-moz-range-track {
+  height: 8px;
+  background: linear-gradient(to right, var(--ov-key) var(--ov-progress, 0%), var(--ov-track) var(--ov-progress, 0%));
+  box-shadow: inset 0 0 0 2px var(--ov-ink);
+}
+
+.overland-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 22px;
+  margin-top: -7px;
+  border: 0;
+  border-radius: 0;
+  background: var(--ov-ink);
+  box-shadow: inset 0 0 0 3px #fff, 0 0 0 2px var(--ov-ink);
+}
+
+.overland-scrub::-moz-range-thumb {
+  width: 14px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: var(--ov-ink);
+  box-shadow: inset 0 0 0 3px #fff, 0 0 0 2px var(--ov-ink);
+}
+
+.overland-scrub:focus-visible {
+  outline: 3px solid var(--ov-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overland-realm-text-box,
+  .overland-realm-controls,
+  .overland-jump-status {
+    animation-name: overland-fade-in;
+    animation-duration: 200ms;
+  }
+}
+
+/* The jump's notices sit in a layer of their own, above the map and any cover. */
+.overland-jump-status-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+  color: var(--ov-ink);
+}
+
+.overland-jump-status-layer > * {
+  pointer-events: auto;
+}
+
+/* ---------------------------------------------------------------- the 3D town */
+
+.overland-diorama {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: #26332b;
+  color: var(--ov-ink);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.overland-town-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.overland-town-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+}
+
+.overland-town-canvas:active {
+  cursor: grabbing;
+}
+
+.overland-town-canvas:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: -3px;
+}
+
+.overland-town-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.overland-town-ui[hidden] {
+  display: none;
+}
+
+.overland-town-head {
+  position: absolute;
+  left: calc(16px + var(--safe-area-left, 0px));
+  top: calc(16px + var(--safe-area-top, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: calc(100% - 140px);
+  padding: 8px 12px;
+  border: 2px solid var(--ov-ink);
+  border-radius: 4px;
+  background: #f8f6ee;
+  box-shadow:
+    inset 0 0 0 2px #c9cfdb,
+    0 3px 0 rgba(13, 18, 28, 0.45);
+}
+
+.overland-town-back {
+  position: absolute;
+  right: calc(16px + var(--safe-area-right, 0px));
+  top: calc(16px + var(--safe-area-top, 0px));
+  pointer-events: auto;
+}
+
+.overland-town-back .overland-key {
+  height: 44px;
+  min-width: 64px;
+  padding: 0 12px;
+}
+
+.overland-town-signs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overland-town-sign {
+  position: absolute;
+  left: -100px;
+  top: -100px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+
+.overland-town-sign:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: 0;
+}
+
+.overland-town-box {
+  /* Above the town, so it never sits on the signposts along the front. */
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: calc(84px + var(--safe-area-top, 0px));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 0 rgba(13, 18, 28, 0.4));
+}
+
+.overland-town-hint {
+  position: absolute;
+  left: calc(16px + var(--safe-area-left, 0px));
+  bottom: calc(16px + var(--safe-area-bottom, 0px));
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 3px;
+  background: rgba(29, 36, 51, 0.72);
+}
+
+.overland-jump.overland-jump-town {
+  z-index: 2;
+}
+
+.overland-jump-status-layer.overland-jump-town-status {
+  z-index: 5;
+}
+
+.overland-jump-travel {
+  position: absolute;
+}
+
+.overland-jump-travel .overland-key {
+  height: 44px;
+  min-width: 72px;
+  padding: 0 12px;
+}
+
+.overland-town-notice {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: #f8f6ee;
+}
+
+.overland.overland-in-town {
+  /* The town is full-bleed, as the 3D world it opens into is. */
+  inset: 0;
+  z-index: var(--z-overlay);
+}
+
+/* ---------------------------------------------------------------- her story */
+
+.overland-town-box {
+  pointer-events: none;
+}
+
+.overland-town-box > canvas {
+  pointer-events: none;
+}
+
+.overland-town-box-page {
+  position: absolute;
+  inset: 0;
+  margin: 0 auto;
+  max-width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.overland-town-box-page:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: 2px;
+}
+
+.overland-town-polaroids {
+  position: absolute;
+  left: -200px;
+  top: -200px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+}
+
+.overland-polaroid {
+  min-width: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  filter: drop-shadow(0 3px 0 rgba(13, 18, 28, 0.4));
+}
+
+.overland-polaroid:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: 2px;
+}
+
+.overland-viewer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: calc(var(--z-overlay) + 10);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: calc(16px + var(--safe-area-top, 0px)) 16px 12px;
+  background: rgba(13, 18, 28, 0.82);
+  color: #f8f6ee;
+}
+
+.overland-viewer-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-height: 0;
+  max-width: min(640px, 100%);
+  margin: 0;
+}
+
+.overland-viewer-image {
+  display: block;
+  min-height: 0;
+  max-width: 100%;
+  max-height: calc(100dvh - 260px);
+  width: auto;
+  height: auto;
+  border: 4px solid #f8f6ee;
+  border-bottom-width: 14px;
+  background: #3a4560;
+}
+
+.overland-viewer-caption {
+  max-width: 46ch;
+  font: 15px/1.4 ui-monospace, Menlo, monospace;
+  text-align: center;
+}
+
+.overland-viewer-caption p {
+  margin: 0;
+}
+
+.overland-viewer-title {
+  font-weight: 700;
+}
+
+.overland-viewer-evidence {
+  display: inline-block;
+  margin-top: 6px !important;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.overland-viewer .overland-key {
+  height: 44px;
+}
+
+.overland-town-box-frame {
+  position: relative;
+}
+
+.overland-moment {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  filter: drop-shadow(0 4px 0 rgba(13, 18, 28, 0.4));
+  animation: overland-moment-in 240ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@keyframes overland-moment-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overland-moment {
+    animation: none;
+  }
+}
+
+.overland-moment-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.overland-moment-photo {
+  display: block;
+  width: 68px;
+  min-height: 44px;
+  margin: 0;
+  padding: 3px 3px 10px;
+  border: 2px solid var(--ov-ink);
+  border-radius: 3px;
+  background: #f8f6ee;
+  cursor: pointer;
+}
+
+.overland-moment-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 96px;
+  object-fit: cover;
+}
+
+.overland-moment-photo:focus-visible {
+  outline: 3px solid #ffd35a;
+  outline-offset: 2px;
+}
+
+.overland-moment .overland-key {
+  height: 44px;
+  min-width: 56px;
+  padding: 0 12px;
+}
+
+/* ---------------------------------------------------------------- on a phone */
+
+/* Overland is a full-screen game on a phone: it covers the app's tab bar, as
+   its 3D towns and worlds already do, and offers its own way out. A phone
+   held sideways counts: the media query matches PHONE_QUERY. */
+@media (max-width: 767px), (max-height: 520px) {
+  .overland {
+    inset: 0;
+    z-index: var(--z-overlay);
+  }
+}
+
+.overland-phone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--safe-area-top, 0px) var(--safe-area-right, 0px) var(--safe-area-bottom, 0px) var(--safe-area-left, 0px);
+  background: linear-gradient(180deg, #2a3348 0%, #1d2433 100%);
+}
+
+.overland-phone .overland-screen {
+  flex: none;
+  border-radius: 0;
+  background: #4b8fd6;
+}
+
+.overland-phone-corner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+.overland-phone-corner .overland-key {
+  height: 44px;
+  min-width: 56px;
+  padding: 0 12px;
+}
+
+.overland-phone-keys {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0;
+  padding: 12px max(12px, var(--safe-area-left, 0px)) 12px max(12px, var(--safe-area-right, 0px));
+  background: linear-gradient(180deg, #fbfbf8 0%, var(--ov-shell) 40%, var(--ov-shell-2) 100%);
+}
+
+@media (max-width: 380px) {
+  .overland-phone-keys {
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .overland-phone-keys .overland-key-square {
+    min-width: 44px;
+    padding: 0 10px;
+  }
+}
+
+/* The chosen signpost's board, marked in the scene. */
+.overland-town-pointer {
+  position: absolute;
+  left: -100px;
+  top: -100px;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 0 rgba(13, 18, 28, 0.5));
+  animation: overland-pointer-bob 900ms steps(2, jump-none) infinite;
+}
+
+.overland-town-pointer[hidden] {
+  display: none;
+}
+
+@keyframes overland-pointer-bob {
+  50% {
+    transform: translate(-50%, calc(-100% - 4px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overland-town-pointer {
+    animation: none;
+  }
+}
+
+/* On a phone the signposts are a strip of route chips in thumb reach. */
+.overland-town-chips {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  padding: 28px max(12px, var(--safe-area-right, 0px)) calc(12px + var(--safe-area-bottom, 0px)) max(12px, var(--safe-area-left, 0px));
+  background: linear-gradient(180deg, rgba(13, 18, 28, 0) 0%, rgba(13, 18, 28, 0.55) 100%);
+  pointer-events: auto;
+}
+
+.overland-town-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.overland-town-chips > li {
+  flex: none;
+  scroll-snap-align: center;
+}
+
+.overland-town-chips .overland-town-sign {
+  position: static;
+  display: block;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 2px solid var(--ov-ink);
+  border-radius: 4px;
+  background: #f8f6ee;
+  box-shadow:
+    inset 0 0 0 2px #c9cfdb,
+    0 3px 0 rgba(13, 18, 28, 0.45);
+  transform: none;
+  text-align: left;
+}
+
+.overland-town-chips .overland-town-sign[data-chosen="true"] {
+  border-color: var(--ov-key);
+  box-shadow:
+    inset 0 0 0 2px var(--ov-key-hi),
+    0 3px 0 rgba(13, 18, 28, 0.45);
+}

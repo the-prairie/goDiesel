@@ -52,7 +52,8 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.18.1",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "three": "0.186.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

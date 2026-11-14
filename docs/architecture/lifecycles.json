@@ -305,7 +305,9 @@
         "app/src/surfaces/replay/playback/google-replay-stage-state.test.ts"
       ],
       "adapters": [
-        "app/src/surfaces/replay/components/google-route-navigator-stage.tsx"
+        "app/src/surfaces/replay/components/google-route-navigator-stage.tsx",
+        "app/src/surfaces/replay/playback/use-google-replay-driver.ts",
+        "app/src/labs/overland/overland-realm.tsx"
       ],
       "states": [
         "status:loading",
@@ -484,6 +486,76 @@
       ],
       "states": [],
       "identity": "sessionId for provider and grounding reports"
+    },
+    {
+      "id": "overland-jump",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The Overland lab's jump from the pixel world into a route's Google 3D replay and back: dive, hold, the reveal under our pixel cover or the 3D town fading over the live map, the realm, surfacing, and the pixel fallback.",
+      "module": "app/src/labs/overland/overland-jump-state.ts",
+      "transition": "reduceOverlandJump",
+      "test": [
+        "app/src/labs/overland/overland-jump-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/overland/overland-jump.tsx"
+      ],
+      "states": [
+        "browsing",
+        "diving",
+        "holding",
+        "resolving",
+        "realm",
+        "surfacing",
+        "fallback",
+        "transition:wipe",
+        "transition:live",
+        "transition:town"
+      ],
+      "identity": "jumpId minted by jumpRequested; diveFinished, sceneStatusReceived, resolveStepElapsed, and surfaceFinished must name the current jump"
+    },
+    {
+      "id": "overland-town",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Opening one of her places as a 3D pixel town: the renderer chunk loads, WebGL starts and the town draws its first frame; a missing WebGL, a failed chunk, a renderer error or a lost context falls back to the pixel town; while ready the quality tier only steps down.",
+      "module": "app/src/labs/overland/overland-town-state.ts",
+      "transition": "reduceOverlandTown",
+      "test": [
+        "app/src/labs/overland/overland-town-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/overland/overland-town.tsx"
+      ],
+      "states": [
+        "idle",
+        "loading",
+        "ready",
+        "fallback"
+      ],
+      "identity": "loadId minted by loadStarted; rendererReady, rendererFailed, contextLost and qualityLowered must name the current load, and fallback is final for its load"
+    },
+    {
+      "id": "overland-moments",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Her annotations met along a route in the Overland realm: a moment ahead is approached (playback slows), shown when reached (slower), put away after a while or on request, paused while its photo is open; moments reached together queue; scrubbing forward skips and scrubbing back re-arms.",
+      "module": "app/src/labs/overland/overland-moments-state.ts",
+      "transition": "reduceOverlandMoments",
+      "test": [
+        "app/src/labs/overland/overland-moments-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/overland/overland-realm.tsx"
+      ],
+      "states": [
+        "idle",
+        "approaching",
+        "showing",
+        "mediaOpen",
+        "dismissed"
+      ],
+      "identity": "the annotation id: dismissRequested, mediaOpened and mediaClosed must name the moment on screen; progress is compared with the last progress the reducer saw"
     },
     {
       "id": "route-intelligence",

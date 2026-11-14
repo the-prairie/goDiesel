@@ -14,9 +14,11 @@ export async function installGoogleReplay(page: Page, state: "ready" | "unavaila
         focusRatio: number;
         endRatio: number;
       }>;
+      __GODIESEL_GOOGLE_MOUNTS__?: number;
       __GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__?: () => {
         mount(options: {
           container: HTMLElement;
+          positionMarker?: (marker: HTMLElement) => () => void;
           onStatus: (status: {
             state: "ready" | "unavailable" | "loading";
             message: string;
@@ -50,8 +52,11 @@ export async function installGoogleReplay(page: Page, state: "ready" | "unavaila
 
     replayWindow.__GODIESEL_CINEMATIC_ROUTE_CALLS__ = [];
     replayWindow.__GODIESEL_CAMERA_CALLS__ = [];
-    replayWindow.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => ({
-      async mount({ container, onStatus }) {
+    replayWindow.__GODIESEL_GOOGLE_ROUTE_NAVIGATOR_FACTORY__ = () => {
+      let undress: (() => void) | undefined;
+      return {
+      async mount({ container, onStatus, positionMarker }) {
+        replayWindow.__GODIESEL_GOOGLE_MOUNTS__ = (replayWindow.__GODIESEL_GOOGLE_MOUNTS__ ?? 0) + 1;
         replayWindow.__GODIESEL_SET_PROVIDER_STATUS__ = (state) => onStatus({ state, message: `Google 3D fixture ${state}.` });
         if (providerState === "unavailable") {
           onStatus({
@@ -70,6 +75,14 @@ export async function installGoogleReplay(page: Page, state: "ready" | "unavaila
         credits.style.cssText = "position:absolute;bottom:4px;right:10px;height:24px";
         credits.onclick = () => { credits.textContent = "Provider information opened"; };
         container.replaceChildren(canvas, credits);
+        if (positionMarker) {
+          // Like the engine, a caller may dress the in-scene position marker.
+          const marker = document.createElement("div");
+          marker.dataset.testid = "replay-position-marker";
+          marker.style.cssText = "position:absolute;left:50%;top:50%";
+          undress = positionMarker(marker);
+          container.append(marker);
+        }
         onStatus({ state: providerState, message: `Google 3D fixture ${providerState}.` });
       },
       setCamera(pose: {
@@ -85,8 +98,12 @@ export async function installGoogleReplay(page: Page, state: "ready" | "unavaila
         replayWindow.__GODIESEL_CINEMATIC_ROUTE_CALLS__?.push(treatment);
       },
       setRouteReveal() {},
-      destroy() {},
-    });
+      destroy() {
+        undress?.();
+        undress = undefined;
+      },
+      };
+    };
 
     replayWindow.__GODIESEL_REPLAY_ENGINE_FACTORY__ = () => ({
       async mount({ container, onStatus }) {
