@@ -105,7 +105,8 @@
 .moment-readout {
   position: fixed;
   top: calc(196px + env(safe-area-inset-top));
-  right: max(12px, env(safe-area-inset-right));
+  /* Clear of the map's keys down the right edge (44 px wide). */
+  right: calc(64px + env(safe-area-inset-right));
   left: max(12px, env(safe-area-inset-left));
   z-index: 15;
   display: flex;

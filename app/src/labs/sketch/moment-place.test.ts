@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { footprintAt, streetFronts } from "@/labs/sketch/moment-place";
+import { footprintAt, streetFronts, tappedFootprint } from "@/labs/sketch/moment-place";
 
 // Small offsets near Kyoto: 1e-4° of latitude is about 11.1 m.
 const LNG = 135.77;
@@ -48,5 +48,21 @@ describe("streetFronts", () => {
     const long: [number, number][] = [at(0, 0), at(20, 0), at(20, 8), at(0, 8), at(0, 0)];
     const [front] = streetFronts(long, []);
     expect(front.frontM).toBeCloseTo(20, 1);
+  });
+});
+
+describe("the building she tapped, seen at a steep angle", () => {
+  // Two houses side by side; the ground point under her finger lies behind the nearer one.
+  const near: [number, number][] = [[135, 35], [135.0002, 35], [135.0002, 35.0002], [135, 35.0002], [135, 35]];
+  const far: [number, number][] = [[135.001, 35], [135.0012, 35], [135.0012, 35.0002], [135.001, 35.0002], [135.001, 35]];
+  const geometry = { type: "MultiPolygon", coordinates: [[near], [far]] } as const;
+
+  it("is the footprint under her finger when the ground point is inside one", () => {
+    expect(tappedFootprint(geometry as never, [135.0001, 35.0001])).toEqual(near);
+  });
+
+  it("is the nearest footprint of the building drawn there when the ground point falls behind it", () => {
+    expect(tappedFootprint(geometry as never, [135.0001, 35.0006])).toEqual(near);
+    expect(tappedFootprint({ type: "LineString", coordinates: [] } as never, [135, 35])).toBeNull();
   });
 });

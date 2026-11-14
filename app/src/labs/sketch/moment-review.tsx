@@ -4,7 +4,7 @@ import type { Map as MapLibreMap, MapMouseEvent, Marker } from "maplibre-gl";
 import maplibregl from "@/providers/maplibre";
 import { initialAssignState, reduceAssign, type AssignEvent } from "@/labs/sketch/moment-assign-state";
 import type { MomentsData, Placement } from "@/labs/sketch/moment-catalog";
-import { footprintAt, streetFronts } from "@/labs/sketch/moment-place";
+import { streetFronts, tappedFootprint } from "@/labs/sketch/moment-place";
 import ReviewReadout from "@/labs/sketch/moment-review-readout";
 import "@/labs/sketch/moment-review.css";
 
@@ -16,9 +16,14 @@ const WRITER = import.meta.env.VITE_ADMIN_API_URL?.replace(/\/$/, "") ?? "http:/
 const BUILDINGS = ["building-3d", "building-plan"];
 const ROADS = ["road-major", "road-mid", "road-minor"];
 
+/**
+ * A call to her loopback writer. A missing writer is refused at once (on her
+ * phone too); the wait only covers a slow one, as on a busy laptop: 4 s to
+ * ask, 15 s for a save, so a save is never cut off and reported as lost.
+ */
 async function writer(path: string, init?: RequestInit) {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 1500);
+  const timer = window.setTimeout(() => controller.abort(), init?.method === "PUT" ? 15_000 : 4_000);
   try {
     return await fetch(`${WRITER}${path}`, { ...init, signal: controller.signal });
   } finally {
@@ -64,7 +69,7 @@ export default function MomentReview({ map, data, setData, placementTap }: Momen
     const onClick = (event: MapMouseEvent) => {
       const hit = map.queryRenderedFeatures(event.point, { layers: BUILDINGS.filter((id) => map.getLayer(id)) });
       const point: [number, number] = [event.lngLat.lng, event.lngLat.lat];
-      const ring = hit.map((feature) => footprintAt(feature.geometry as never, point)).find(Boolean);
+      const ring = hit.map((feature) => tappedFootprint(feature.geometry as never, point)).find(Boolean);
       if (!ring) return;
       const { x, y } = event.point;
       const roads = map

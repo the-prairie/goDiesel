@@ -23,6 +23,30 @@ export function footprintAt(geometry: Geometry, point: LngLat): LngLat[] | null 
   return null;
 }
 
+/**
+ * The footprint of the building she tapped. The map names the building drawn
+ * under her finger; at a steep angle the ground point there can lie behind its
+ * raised side, so if no footprint holds it, the nearest of that building's does.
+ */
+export function tappedFootprint(geometry: Geometry, point: LngLat): LngLat[] | null {
+  const held = footprintAt(geometry, point);
+  if (held) return held;
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates as LngLat[][]] : geometry.type === "MultiPolygon" ? (geometry.coordinates as LngLat[][][]) : [];
+  let best: LngLat[] | null = null;
+  let distance = Infinity;
+  for (const [ring] of polygons) {
+    if (!ring) continue;
+    for (const [lng, lat] of ring) {
+      const d = (lng - point[0]) ** 2 + (lat - point[1]) ** 2;
+      if (d < distance) {
+        distance = d;
+        best = ring;
+      }
+    }
+  }
+  return best;
+}
+
 export interface Front {
   at: { lng: number; lat: number };
   facingDeg: number;
@@ -70,3 +94,4 @@ export function streetFronts(ring: readonly LngLat[], roads: readonly (readonly 
   });
   return fronts.sort((p, q) => p.rank - q.rank).map(({ rank: _rank, ...front }) => front);
 }
+
