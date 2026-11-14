@@ -638,3 +638,46 @@ are still in the layer.
 The sketch world's code is now 76.0 of its 76 KiB budget (12 bytes to spare):
 to fit, the per-tile timing used to find the cause was taken out again, and
 the layer's tile maths shares one Web Mercator helper.
+
+## Round 9: the replay's transport, marker and line
+
+**What is shared.** The transport (Back, Play, the scrubber) and the runner
+are the jump realm's own (`overland-realm.tsx`), drawn in the pixel or the
+sketch skin; production Replay has its own controls and its own dot marker.
+The route line is shared: the realm and production Replay both draw the
+engine's `immersive` palette.
+
+**S28. A native transport, a position marker, a line that reads.** Sketch
+skin only (the shelved pixel skin keeps its handheld bar):
+- Leaving is a round 44 pt Back top-left, the route card beside it, never
+  under it (`sketchRealmLayout`).
+- Playback is one frosted bar above Google's credit, with 12 pt clear space
+  and above the home indicator:
+  - a 52 pt round icon Play/Pause named "Play"/"Pause";
+  - a native range slider with a 4 pt track in her red and a 24 pt round
+    thumb, 44 pt tall to grab;
+  - distance so far and in all under the track, and "13.0 of 32.6 km" as
+    its value text;
+  - arrows step 1%, shift 5%, Page 10%, Home and End.
+- Focus rings show for the keyboard only (`:focus-visible`), in system blue.
+- The card and moment cards share the bar's material (frosted, rounded) and
+  no longer repeat the distance.
+- The stick figure is gone (no character yet). In its place is a position
+  puck: her red with a white ring, a soft dark halo, and a white heading
+  arrow turned by the route's bearing against the camera's heading.
+  - It is 32 pt close up and 18 pt over the whole route (log-scaled by the
+    camera's range), so it never reads as a body over the city.
+- The immersive line (shared with production Replay):
+  - the run in her red, 4.5 pt;
+  - the way ahead in white, 3 pt;
+  - both cased dark at 45%.
+  - Widths are in screen points: Google draws in device pixels, so they are
+    scaled by the device pixel ratio.
+  - The line is drawn where tree canopy or a roof stands over it.
+- How the camera moves is unchanged.
+
+Bundles:
+- the realm chunk is 15.6 KB (was 14.1);
+- Overland is 131.8 of 150 KiB (was 129.9);
+- the replay engine is 13.7 KB (was 13.5);
+- the sketch world is unchanged.

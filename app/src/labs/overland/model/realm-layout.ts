@@ -64,3 +64,29 @@ export function realmLayout({ width, height, safe }: RealmViewport, textBoxHeigh
   };
   return { textBox, controls };
 }
+
+const LEAVE_PX = 44;
+const TRANSPORT_HEIGHT = 76;
+/** Clear space kept between our controls and the provider's credit. */
+const CREDIT_CLEAR = 12;
+
+/**
+ * The sketch skin's replay: leaving top-left, the route card beside it, and
+ * the transport above Google's credit with clear space and above the home
+ * indicator. Playback and navigation are separate controls.
+ */
+export function sketchRealmLayout({ width, height, safe }: RealmViewport) {
+  const safeWidth = width - safe.left - safe.right;
+  const leave: Rect = { left: safe.left + EDGE, top: safe.top + EDGE, width: LEAVE_PX, height: LEAVE_PX };
+  const cardLeft = leave.left + LEAVE_PX + GAP;
+  const card: Rect = { left: cardLeft, top: leave.top, width: Math.min(width - safe.right - EDGE - cardLeft, TEXT_BOX_MAX), height: 0 };
+  const transportWidth = Math.min(safeWidth - 2 * EDGE, CONTROLS_MAX);
+  const bottom = height - Math.max(ATTRIBUTION_BAND_PX + CREDIT_CLEAR, safe.bottom + GAP);
+  const transport: Rect = {
+    left: safe.left + (safeWidth - transportWidth) / 2,
+    top: bottom - TRANSPORT_HEIGHT,
+    width: transportWidth,
+    height: TRANSPORT_HEIGHT,
+  };
+  return { leave, card, transport };
+}

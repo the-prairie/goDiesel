@@ -17,12 +17,12 @@ import { realmSpriteScale } from "@/labs/overland/model/town-camera";
 import { clipText, drawFrame, drawText } from "@/labs/overland/engine/text-draw";
 import { measureText } from "@/labs/overland/engine/font";
 import type { OverlandEntry } from "@/labs/overland/model/overland-entries";
-import { realmLayout, type RealmViewport } from "@/labs/overland/model/realm-layout";
+import { realmLayout, sketchRealmLayout, type RealmViewport } from "@/labs/overland/model/realm-layout";
 import { realmBoxContent } from "@/labs/overland/model/text-box";
 import { walkFrame } from "@/labs/overland/model/walk-cycle";
 import type { JumpPresentation, OverlandJumpState } from "@/labs/overland/overland-jump-state";
 import { Key, SkinLabel } from "@/labs/overland/overland-ui";
-import { sketchRunnerFrames } from "@/labs/sketch/sketch-runner";
+import { bearingAt, markerRotation, markerSize, positionMarkerImage, progressReadout, scrubKeyTarget } from "@/labs/sketch/sketch-replay-controls";
 import { useGoogleReplayDriver } from "@/surfaces/replay/playback/use-google-replay-driver";
 import type { GoogleRendererUnavailableReason, GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-renderer-state";
 
@@ -210,7 +210,8 @@ export interface OverlandRealmProps {
  */
 export default function OverlandRealm({ route, entry, jumpId, phase, presentation, reducedMotion, viewport, onStatus, onLeave, skin = "pixel" }: OverlandRealmProps) {
   const sketch = skin === "sketch";
-  const sprite = useMemo(() => (sketch ? sketchRunnerFrames(entry.kind, viewport.height) : spriteFrames(entry.kind, viewport.height)), [entry.kind, sketch, viewport.height]);
+  // The pixel skin's runner sprite; the sketch skin draws a position marker instead.
+  const sprite = useMemo(() => (sketch ? { width: 24, height: 24, urls: [positionMarkerImage(24, 0).url] } : spriteFrames(entry.kind, viewport.height)), [entry.kind, sketch, viewport.height]);
   const frames = sprite.urls;
   const spriteRef = useRef<HTMLImageElement | null>(null);
   const positionMarker = useCallback(
@@ -222,8 +223,9 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
       image.width = sprite.width;
       image.height = sprite.height;
       image.style.cssText = `display:block;width:${sprite.width}px;height:${sprite.height}px;${sketch ? "" : "image-rendering:pixelated;"}pointer-events:none`;
+      if (sketch) image.dataset.markerHeading = "0";
       marker.append(image);
-      marker.dataset.markerKind = sketch ? "sketch-runner" : "overland-sprite";
+      marker.dataset.markerKind = sketch ? "sketch-position" : "overland-sprite";
       spriteRef.current = image;
       return () => {
         image.remove();
@@ -268,7 +270,19 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
     let animationFrame = 0;
     const tick = () => {
       const image = spriteRef.current;
-      if (image) {
+      if (image && sketch) {
+        // Sized for the camera's distance, pointing along the route as seen on screen.
+        const map = image.closest("gmp-map-3d") as (HTMLElement & { heading?: number; range?: number }) | null;
+        const size = markerSize(map?.range);
+        const { url, turn } = positionMarkerImage(size, markerRotation(bearingAt(route.route, sessionRef.current.control.progressM), map?.heading ?? 0));
+        if (image.dataset.markerHeading !== String(turn) || image.width !== size) {
+          image.src = url;
+          image.width = size;
+          image.height = size;
+          image.style.width = image.style.height = `${size}px`;
+          image.dataset.markerHeading = String(turn);
+        }
+      } else if (image) {
         const frame = walkFrame({ progressM: sessionRef.current.control.progressM, totalDistanceM, frames: frames.length, reducedMotion });
         if (image.dataset.frame !== String(frame)) {
           image.src = frames[frame];
@@ -279,7 +293,7 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [frames, reducedMotion, sessionRef, status.state, totalDistanceM]);
+  }, [frames, reducedMotion, route.route, sessionRef, sketch, status.state, totalDistanceM]);
 
   const seek = useCallback(
     (progressM: number) => {
@@ -337,6 +351,8 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
     if (boxRef.current && !sketch) drawTextBox(boxRef.current, lines);
   }, [lines, boxWidth, boxHeight, sketch]);
 
+  const sketchLayout = sketch ? sketchRealmLayout(viewport) : null;
+  const readout = progressReadout(session.control.progressM, totalDistanceM);
   const playRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (realm) playRef.current?.focus({ preventScroll: true });
@@ -379,13 +395,17 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
             data-skin={skin}
             data-testid="overland-realm-text-box"
             ref={sketch ? sketchBoxRef : undefined}
-            style={{ left: layout.textBox.left, top: layout.textBox.top, width: boxWidth * textScale, height: sketch ? undefined : boxHeight * textScale }}
+            style={
+              sketchLayout
+                ? { left: sketchLayout.card.left, top: sketchLayout.card.top, width: sketchLayout.card.width }
+                : { left: layout.textBox.left, top: layout.textBox.top, width: boxWidth * textScale, height: boxHeight * textScale }
+            }
           >
             {sketch ? (
               <div aria-hidden="true" className="sketch-story-card">
+                {/* Distance lives at the bar now; the card names the route. */}
                 <p className="sketch-box-heading">
                   <span>{content.heading}</span>
-                  <span className="sketch-box-progress">{content.progress}</span>
                 </p>
                 <p className="sketch-box-title">{content.title}</p>
                 {content.body ? <p className="sketch-box-body">{content.body}</p> : null}
@@ -400,44 +420,93 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
               <p>{content.body}</p>
             </div>
           </div>
-          <div
-            className="overland-realm-controls"
-            data-skin={skin}
-            data-testid="overland-realm-controls"
-            role="group"
-            aria-label="Replay"
-            style={{ left: layout.controls.left, top: layout.controls.top, width: layout.controls.width, height: layout.controls.height }}
-          >
-            <Key label="Back" onClick={onLeave}>
-              <SkinLabel skin={skin} text="Back" />
-            </Key>
-            <Key className="overland-key-play" label={playing ? "Pause" : "Play"} onClick={toggle} ref={playRef}>
-              <SkinLabel bold colour="#ffffff" skin={skin} text={playing ? "Pause" : "Play"} />
-            </Key>
-            <input
-              aria-label="Route progress"
-              data-moment-phase={moments.phase}
-              aria-valuetext={content.progress}
-              className="overland-scrub"
-              max={100}
-              min={0}
-              onChange={(event) => seek((Number(event.currentTarget.value) / 100) * totalDistanceM)}
-              step={0.1}
-              style={{ "--ov-progress": `${percent}%` } as React.CSSProperties}
-              type="range"
-              value={Math.round(percent * 10) / 10}
-            />
-          </div>
+          {sketchLayout ? (
+            <>
+              <button aria-label="Back" className="sketch-replay-leave" onClick={onLeave} style={{ left: sketchLayout.leave.left, top: sketchLayout.leave.top }} type="button">
+                <svg aria-hidden="true" height="20" viewBox="0 0 20 20" width="20">
+                  <path d="M12.5 4 6.5 10l6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
+                </svg>
+              </button>
+              <div
+                aria-label="Replay"
+                className="sketch-replay-bar"
+                data-skin={skin}
+                data-testid="overland-realm-controls"
+                role="group"
+                style={{ left: sketchLayout.transport.left, top: sketchLayout.transport.top, width: sketchLayout.transport.width, height: sketchLayout.transport.height }}
+              >
+                <button aria-label={playing ? "Pause" : "Play"} className="sketch-replay-play" onClick={toggle} ref={playRef} type="button">
+                  <svg aria-hidden="true" height="22" viewBox="0 0 22 22" width="22">
+                    {playing ? <path d="M6 4h3.5v14H6zM12.5 4H16v14h-3.5z" fill="currentColor" /> : <path d="M7 3.8v14.4a.8.8 0 0 0 1.2.7l11.3-7.2a.8.8 0 0 0 0-1.4L8.2 3.1A.8.8 0 0 0 7 3.8Z" fill="currentColor" />}
+                  </svg>
+                </button>
+                <div className="sketch-replay-track">
+                  <input
+                    aria-label="Route progress"
+                    aria-valuetext={readout.valueText}
+                    className="sketch-replay-scrub"
+                    data-moment-phase={moments.phase}
+                    max={100}
+                    min={0}
+                    onChange={(event) => seek((Number(event.currentTarget.value) / 100) * totalDistanceM)}
+                    onKeyDown={(event) => {
+                      const to = scrubKeyTarget(event, sessionRef.current.control.progressM, totalDistanceM);
+                      if (to === null) return;
+                      event.preventDefault();
+                      seek(to);
+                    }}
+                    step={0.1}
+                    style={{ "--ov-progress": `${percent}%` } as React.CSSProperties}
+                    type="range"
+                    value={Math.round(percent * 10) / 10}
+                  />
+                  <p aria-hidden="true" className="sketch-replay-times">
+                    <span>{readout.elapsed}</span>
+                    <span>{readout.total}</span>
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div
+              className="overland-realm-controls"
+              data-skin={skin}
+              data-testid="overland-realm-controls"
+              role="group"
+              aria-label="Replay"
+              style={{ left: layout.controls.left, top: layout.controls.top, width: layout.controls.width, height: layout.controls.height }}
+            >
+              <Key label="Back" onClick={onLeave}>
+                <SkinLabel skin={skin} text="Back" />
+              </Key>
+              <Key className="overland-key-play" label={playing ? "Pause" : "Play"} onClick={toggle} ref={playRef}>
+                <SkinLabel bold colour="#ffffff" skin={skin} text={playing ? "Pause" : "Play"} />
+              </Key>
+              <input
+                aria-label="Route progress"
+                data-moment-phase={moments.phase}
+                aria-valuetext={content.progress}
+                className="overland-scrub"
+                max={100}
+                min={0}
+                onChange={(event) => seek((Number(event.currentTarget.value) / 100) * totalDistanceM)}
+                step={0.1}
+                style={{ "--ov-progress": `${percent}%` } as React.CSSProperties}
+                type="range"
+                value={Math.round(percent * 10) / 10}
+              />
+            </div>
+          )}
           {moment ? (
             <MomentBox
               annotation={moment}
               key={moment.id}
-              left={layout.textBox.left}
+              left={sketchLayout ? sketchLayout.card.left : layout.textBox.left}
               onClose={() => sendMoment({ type: "dismissRequested", id: moment.id, nowMs: performance.now() })}
               onOpenPhoto={() => sendMoment({ type: "mediaOpened", id: moment.id })}
               skin={skin}
-              top={layout.textBox.top + boxHeight * textScale + 10}
-              width={layout.textBox.width}
+              top={(sketchLayout ? sketchLayout.card.top : layout.textBox.top) + boxHeight * textScale + 10}
+              width={sketchLayout ? sketchLayout.card.width : layout.textBox.width}
             />
           ) : null}
           <p aria-live="polite" className="sr-only" data-testid="overland-moment-text">

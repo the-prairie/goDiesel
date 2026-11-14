@@ -471,3 +471,178 @@
   font: 500 14px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   box-shadow: 2px 2px 0 rgba(29, 29, 31, 0.18);
 }
+
+/* ---------------------------------------------------------------- the replay (round 9)
+   One material for everything over Google's world: frosted paper, rounded,
+   softly shadowed. Leaving is its own round control top-left; playback is one
+   bar above Google's credit. Focus rings show for the keyboard only. */
+
+.sketch-replay-leave,
+.sketch-replay-bar,
+.overland-realm-text-box[data-skin="sketch"] .sketch-story-card,
+.overland-moment[data-skin="sketch"] .sketch-moment-card {
+  background: rgba(251, 251, 248, 0.84);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  backdrop-filter: blur(18px) saturate(1.6);
+  box-shadow: 0 0 0 0.5px rgba(29, 29, 31, 0.1), 0 6px 20px rgba(16, 22, 24, 0.2);
+}
+
+.overland-realm-text-box[data-skin="sketch"] .sketch-story-card,
+.overland-moment[data-skin="sketch"] .sketch-moment-card {
+  border: 0;
+  border-radius: 16px;
+  padding: 10px 14px 12px;
+}
+
+.sketch-replay-leave {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  place-items: center;
+  color: #1d1d1f;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sketch-replay-bar {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px 0 12px;
+  border-radius: 26px;
+  color: #1d1d1f;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.sketch-replay-play {
+  display: grid;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  place-items: center;
+  background: #1d1d1f;
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sketch-replay-track {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.sketch-replay-scrub {
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sketch-replay-scrub::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, #d9412b var(--ov-progress, 0%), rgba(29, 29, 31, 0.16) var(--ov-progress, 0%));
+}
+
+.sketch-replay-scrub::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(29, 29, 31, 0.16);
+}
+
+.sketch-replay-scrub::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: #d9412b;
+}
+
+.sketch-replay-scrub::-webkit-slider-thumb {
+  width: 24px;
+  height: 24px;
+  margin-top: -10px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 0.5px rgba(16, 22, 24, 0.18), 0 2px 6px rgba(16, 22, 24, 0.3);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.sketch-replay-scrub::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 0.5px rgba(16, 22, 24, 0.18), 0 2px 6px rgba(16, 22, 24, 0.3);
+}
+
+.sketch-replay-times {
+  display: flex;
+  justify-content: space-between;
+  margin: -9px 0 0;
+  color: #6e6e73;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  line-height: 14px;
+}
+
+/* Keyboard focus only: a tap never leaves a ring behind. */
+.sketch-replay-leave:focus,
+.sketch-replay-play:focus,
+.sketch-replay-scrub:focus {
+  outline: none;
+}
+
+.sketch-replay-leave:focus-visible,
+.sketch-replay-play:focus-visible {
+  outline: 3px solid #0a84ff;
+  outline-offset: 2px;
+}
+
+.sketch-replay-scrub:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px #0a84ff, 0 2px 6px rgba(16, 22, 24, 0.3);
+}
+
+.sketch-replay-scrub:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px #0a84ff, 0 2px 6px rgba(16, 22, 24, 0.3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sketch-replay-leave,
+  .sketch-replay-play {
+    transition: transform 120ms ease-out;
+  }
+
+  .sketch-replay-leave:active,
+  .sketch-replay-play:active {
+    transform: scale(0.92);
+  }
+
+  .sketch-replay-scrub::-webkit-slider-thumb {
+    transition: transform 120ms ease-out;
+  }
+
+  .sketch-replay-scrub:active::-webkit-slider-thumb {
+    transform: scale(1.2);
+  }
+}

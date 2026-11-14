@@ -6,6 +6,7 @@ import {
   attributionCorners,
   realmLayout,
   rectsIntersect,
+  sketchRealmLayout,
   type Rect,
 } from "@/labs/overland/model/realm-layout";
 
@@ -65,5 +66,38 @@ describe("rectsIntersect", () => {
   it("treats touching edges as clear", () => {
     expect(rectsIntersect({ left: 0, top: 0, width: 10, height: 10 }, { left: 10, top: 0, width: 5, height: 5 })).toBe(false);
     expect(rectsIntersect({ left: 0, top: 0, width: 10, height: 10 }, { left: 9, top: 9, width: 5, height: 5 })).toBe(true);
+  });
+});
+
+describe("sketchRealmLayout", () => {
+  const phone = { width: 402, height: 874, safe: { top: 62, right: 0, bottom: 34, left: 0 } };
+  const bare = { width: 402, height: 874, safe: { top: 0, right: 0, bottom: 0, left: 0 } };
+
+  it("puts leaving top-left, apart from the route card, inside the safe area", () => {
+    const { leave, card } = sketchRealmLayout(phone);
+    expect(leave.width).toBeGreaterThanOrEqual(CONTROL_TARGET_PX);
+    expect(leave.height).toBeGreaterThanOrEqual(CONTROL_TARGET_PX);
+    expect(leave.top).toBeGreaterThanOrEqual(phone.safe.top);
+    expect(leave.left).toBeGreaterThanOrEqual(phone.safe.left);
+    expect(rectsIntersect(leave, card)).toBe(false);
+    expect(card.left + card.width).toBeLessThanOrEqual(phone.width - phone.safe.right);
+  });
+
+  it("keeps the transport clear of Google's credit by at least 12 px, and above the home indicator", () => {
+    for (const viewport of [phone, bare]) {
+      const { transport } = sketchRealmLayout(viewport);
+      const [left, right] = attributionCorners(viewport);
+      const clear = (corner: { top: number }) => corner.top - (transport.top + transport.height);
+      expect(clear(left)).toBeGreaterThanOrEqual(12);
+      expect(clear(right)).toBeGreaterThanOrEqual(12);
+      expect(transport.top + transport.height).toBeLessThanOrEqual(viewport.height - viewport.safe.bottom - 8);
+      expect(transport.height).toBeGreaterThanOrEqual(CONTROL_TARGET_PX);
+    }
+  });
+
+  it("caps the transport's width on a wide screen and centres it", () => {
+    const { transport } = sketchRealmLayout({ width: 1440, height: 900, safe: { top: 0, right: 0, bottom: 0, left: 0 } });
+    expect(transport.width).toBeLessThanOrEqual(560);
+    expect(transport.left + transport.width / 2).toBeCloseTo(720, 0);
   });
 });
