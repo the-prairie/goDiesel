@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bearingAt, markerRotation, markerSize, progressReadout, scrubKeyTarget } from "@/labs/sketch/sketch-replay-controls";
-
-describe("progressReadout", () => {
-  it("reads distance so far and in all, in km to a tenth, and says it plainly for assistive tech", () => {
-    expect(progressReadout(12_960, 32_640)).toEqual({ elapsed: "13.0", total: "32.6 km", valueText: "13.0 of 32.6 km" });
-    expect(progressReadout(0, 32_640).valueText).toBe("0.0 of 32.6 km");
-  });
-});
+import { bearingAt, markerRotation, markerSize, scrubKeyTarget } from "@/labs/sketch/sketch-replay-controls";
 
 describe("scrubKeyTarget", () => {
   const total = 30_000;

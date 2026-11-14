@@ -1,13 +1,6 @@
 // The sketch skin's replay transport and position marker: pure rules, so the
 // realm component only renders them.
 
-/** Distance so far and in all, for the bar and for assistive tech. */
-export function progressReadout(progressM: number, totalM: number) {
-  const elapsed = (Math.round(progressM / 100) / 10).toFixed(1);
-  const total = `${(Math.round(totalM / 100) / 10).toFixed(1)} km`;
-  return { elapsed, total, valueText: `${elapsed} of ${total}` };
-}
-
 /** Where a key moves the scrubber, or null for keys it ignores. */
 export function scrubKeyTarget(event: { key: string; shiftKey: boolean }, progressM: number, totalM: number): number | null {
   const step = (fraction: number) => Math.min(totalM, Math.max(0, progressM + fraction * totalM));

@@ -22,7 +22,8 @@ import { realmBoxContent } from "@/labs/overland/model/text-box";
 import { walkFrame } from "@/labs/overland/model/walk-cycle";
 import type { JumpPresentation, OverlandJumpState } from "@/labs/overland/overland-jump-state";
 import { Key, SkinLabel } from "@/labs/overland/overland-ui";
-import { bearingAt, markerRotation, markerSize, positionMarkerImage, progressReadout, scrubKeyTarget } from "@/labs/sketch/sketch-replay-controls";
+import { bearingAt, markerRotation, markerSize, positionMarkerImage } from "@/labs/sketch/sketch-replay-controls";
+import { SketchRidge } from "@/labs/sketch/sketch-ridge-view";
 import { useGoogleReplayDriver } from "@/surfaces/replay/playback/use-google-replay-driver";
 import type { GoogleRendererUnavailableReason, GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-renderer-state";
 
@@ -352,7 +353,6 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
   }, [lines, boxWidth, boxHeight, sketch]);
 
   const sketchLayout = sketch ? sketchRealmLayout(viewport) : null;
-  const readout = progressReadout(session.control.progressM, totalDistanceM);
   const playRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (realm) playRef.current?.focus({ preventScroll: true });
@@ -376,7 +376,9 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
           className="overland-realm-host"
           ref={driver.containerRef}
           style={
-            pixelated
+            sketchLayout
+              ? { height: sketchLayout.map.height }
+              : pixelated
               ? {
                   width: Math.ceil(viewport.width / pixelLevel),
                   height: Math.ceil(viewport.height / pixelLevel),
@@ -403,7 +405,7 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
           >
             {sketch ? (
               <div aria-hidden="true" className="sketch-story-card">
-                {/* Distance lives at the bar now; the card names the route. */}
+                {/* Distance lives at the ridge now; the card names the route. */}
                 <p className="sketch-box-heading">
                   <span>{content.heading}</span>
                 </p>
@@ -429,42 +431,26 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
               </button>
               <div
                 aria-label="Replay"
-                className="sketch-replay-bar"
+                className="sketch-ridge-strip"
+                data-moment-phase={moments.phase}
                 data-skin={skin}
                 data-testid="overland-realm-controls"
                 role="group"
-                style={{ left: sketchLayout.transport.left, top: sketchLayout.transport.top, width: sketchLayout.transport.width, height: sketchLayout.transport.height }}
+                style={{ left: sketchLayout.ridge.left, top: sketchLayout.ridge.top, width: sketchLayout.ridge.width, height: sketchLayout.ridge.height }}
               >
-                <button aria-label={playing ? "Pause" : "Play"} className="sketch-replay-play" onClick={toggle} ref={playRef} type="button">
-                  <svg aria-hidden="true" height="22" viewBox="0 0 22 22" width="22">
-                    {playing ? <path d="M6 4h3.5v14H6zM12.5 4H16v14h-3.5z" fill="currentColor" /> : <path d="M7 3.8v14.4a.8.8 0 0 0 1.2.7l11.3-7.2a.8.8 0 0 0 0-1.4L8.2 3.1A.8.8 0 0 0 7 3.8Z" fill="currentColor" />}
-                  </svg>
-                </button>
-                <div className="sketch-replay-track">
-                  <input
-                    aria-label="Route progress"
-                    aria-valuetext={readout.valueText}
-                    className="sketch-replay-scrub"
-                    data-moment-phase={moments.phase}
-                    max={100}
-                    min={0}
-                    onChange={(event) => seek((Number(event.currentTarget.value) / 100) * totalDistanceM)}
-                    onKeyDown={(event) => {
-                      const to = scrubKeyTarget(event, sessionRef.current.control.progressM, totalDistanceM);
-                      if (to === null) return;
-                      event.preventDefault();
-                      seek(to);
-                    }}
-                    step={0.1}
-                    style={{ "--ov-progress": `${percent}%` } as React.CSSProperties}
-                    type="range"
-                    value={Math.round(percent * 10) / 10}
-                  />
-                  <p aria-hidden="true" className="sketch-replay-times">
-                    <span>{readout.elapsed}</span>
-                    <span>{readout.total}</span>
-                  </p>
-                </div>
+                <SketchRidge
+                  height={sketchLayout.ridge.height}
+                  onSeek={seek}
+                  onToggle={toggle}
+                  playRef={playRef}
+                  playing={playing}
+                  progressM={session.control.progressM}
+                  reducedMotion={reducedMotion}
+                  route={route}
+                  safeBottom={viewport.safe.bottom}
+                  totalM={totalDistanceM}
+                  width={sketchLayout.ridge.width}
+                />
               </div>
             </>
           ) : (

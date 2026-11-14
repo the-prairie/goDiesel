@@ -83,21 +83,23 @@ describe("sketchRealmLayout", () => {
     expect(card.left + card.width).toBeLessThanOrEqual(phone.width - phone.safe.right);
   });
 
-  it("keeps the transport clear of Google's credit by at least 12 px, and above the home indicator", () => {
+  it("runs the ridge edge to edge along the bottom, its line clear of the home indicator", () => {
     for (const viewport of [phone, bare]) {
-      const { transport } = sketchRealmLayout(viewport);
-      const [left, right] = attributionCorners(viewport);
-      const clear = (corner: { top: number }) => corner.top - (transport.top + transport.height);
-      expect(clear(left)).toBeGreaterThanOrEqual(12);
-      expect(clear(right)).toBeGreaterThanOrEqual(12);
-      expect(transport.top + transport.height).toBeLessThanOrEqual(viewport.height - viewport.safe.bottom - 8);
-      expect(transport.height).toBeGreaterThanOrEqual(CONTROL_TARGET_PX);
+      const { ridge, ridgeLine } = sketchRealmLayout(viewport);
+      expect(ridge.left).toBe(0);
+      expect(ridge.width).toBe(viewport.width);
+      expect(ridge.top + ridge.height).toBe(viewport.height);
+      expect(ridgeLine.top + ridgeLine.height).toBeLessThanOrEqual(viewport.height - viewport.safe.bottom);
+      expect(ridgeLine.height).toBeGreaterThanOrEqual(120);
     }
   });
 
-  it("caps the transport's width on a wide screen and centres it", () => {
-    const { transport } = sketchRealmLayout({ width: 1440, height: 900, safe: { top: 0, right: 0, bottom: 0, left: 0 } });
-    expect(transport.width).toBeLessThanOrEqual(560);
-    expect(transport.left + transport.width / 2).toBeCloseTo(720, 0);
+  it("ends Google's map where the ridge begins, so its credit stands on the map above it, uncovered", () => {
+    for (const viewport of [phone, bare]) {
+      const { map, ridge } = sketchRealmLayout(viewport);
+      expect(map.top).toBe(0);
+      expect(map.height).toBe(ridge.top);
+      expect(map.width).toBe(viewport.width);
+    }
   });
 });

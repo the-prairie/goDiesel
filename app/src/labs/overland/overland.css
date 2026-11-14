@@ -356,6 +356,8 @@
 }
 
 .overland-realm-host {
+  /* Google's map, and anything drawn in it, belongs to this box. */
+  position: relative;
   width: 100%;
   height: 100%;
 }

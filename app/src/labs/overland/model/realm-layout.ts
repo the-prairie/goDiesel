@@ -66,27 +66,23 @@ export function realmLayout({ width, height, safe }: RealmViewport, textBoxHeigh
 }
 
 const LEAVE_PX = 44;
-const TRANSPORT_HEIGHT = 76;
-/** Clear space kept between our controls and the provider's credit. */
-const CREDIT_CLEAR = 12;
+/** The ridge line's drawing: the readout above, the ridge, kilometre ticks below. */
+const RIDGE_PX = 156;
 
 /**
  * The sketch skin's replay: leaving top-left, the route card beside it, and
- * the transport above Google's credit with clear space and above the home
- * indicator. Playback and navigation are separate controls.
+ * the ridge line edge to edge along the bottom on paper, above the home
+ * indicator. Google's map ends where the ridge begins, so its credit, which
+ * Map3DElement draws at the map's bottom and cannot move, stands on the map
+ * just above the ridge, uncovered.
  */
 export function sketchRealmLayout({ width, height, safe }: RealmViewport) {
-  const safeWidth = width - safe.left - safe.right;
   const leave: Rect = { left: safe.left + EDGE, top: safe.top + EDGE, width: LEAVE_PX, height: LEAVE_PX };
   const cardLeft = leave.left + LEAVE_PX + GAP;
   const card: Rect = { left: cardLeft, top: leave.top, width: Math.min(width - safe.right - EDGE - cardLeft, TEXT_BOX_MAX), height: 0 };
-  const transportWidth = Math.min(safeWidth - 2 * EDGE, CONTROLS_MAX);
-  const bottom = height - Math.max(ATTRIBUTION_BAND_PX + CREDIT_CLEAR, safe.bottom + GAP);
-  const transport: Rect = {
-    left: safe.left + (safeWidth - transportWidth) / 2,
-    top: bottom - TRANSPORT_HEIGHT,
-    width: transportWidth,
-    height: TRANSPORT_HEIGHT,
-  };
-  return { leave, card, transport };
+  const ridgeHeight = RIDGE_PX + safe.bottom;
+  const ridge: Rect = { left: 0, top: height - ridgeHeight, width, height: ridgeHeight };
+  const ridgeLine: Rect = { left: 0, top: ridge.top, width, height: RIDGE_PX };
+  const map: Rect = { left: 0, top: 0, width, height: ridge.top };
+  return { leave, card, ridge, ridgeLine, map };
 }

@@ -742,3 +742,59 @@ Fushimi, Calgary ×2, Rome ×2):
   - street: +0.4%;
   - wide: −1.6%.
 - Sketch bundle: 85.8 KiB, against a budget raised to 86 KiB.
+
+## Round 11: the ridge line
+
+**S30. The replay's control is the route's own profile.** This is the
+owner's choice from the prototype studies, in the sketch skin only. The
+pixel skin and production Replay keep theirs.
+- The profile runs edge to edge along the bottom. Behind her it is
+  coloured by effort: sand on the flat, red deepening to 12% grade, sage
+  going down. The grade is smoothed over about nine samples, with a ±1.2%
+  dead band. Ahead of her: hatched paper, an ink line and a loose second
+  stroke.
+- The marker rides the ridge. A tap on it plays or pauses. A press
+  elsewhere takes her there, and a drag scrubs. A still hold (260 ms) opens
+  the ridge to the 6 km round her, and the vertical scale adapts. Dragging
+  is relative while it is open; release settles it back.
+- Under reduced motion the zoom cuts instead of easing.
+- The gesture is a reducer, `sketch-ridge-gesture`, registered as a
+  lifecycle.
+- The readout above the marker: the time of day she was there (in the
+  route's own time zone, from its provenance), the distance and the
+  elevation.
+- Rings mark where she stood still four minutes or more, worked out from
+  recorded time against distance. Zoomed in, they say how long. A flag
+  marks the high point. Kilometre ticks adapt to the span: 5 km on her
+  32 km run, 1 km zoomed, 25 km on a 192 km route.
+- A run without recorded time shows no clock and no stops (1 of 67 routes).
+- A flat run keeps at least 80 m of range, so it stays a calm, low ridge.
+- For assistive tech and the keyboard: one "Route progress" slider whose
+  value says the time and the distance of the total, plus a real Play/Pause
+  button over the marker.
+  - Arrows step 1%, Shift 5%, Page 10%, plus Home and End.
+  - Space plays and pauses.
+  - The focus ring shows for the keyboard only.
+- *Google's credit*:
+  - Map3DElement has no option to place, hide or style its attribution
+    (checked against Google's current reference).
+  - So the ridge sits on its own paper strip and Google's map ends where
+    the strip begins.
+  - The credit, which the map draws at its own bottom, stands on the map
+    just above the ridge, uncovered.
+- Touch:
+  - `touch-action: none`, so the page never scrolls or zooms;
+  - the marker is kept 32 pt from the screen's edges;
+  - the strip's height takes the home-indicator inset;
+  - a thumb may wander 6 pt before a tap becomes a drag.
+- Drawing: a canvas, redrawn only when progress, play state, zoom or size
+  changes. In simulator Safari that is about 10 draws a second while
+  playing, at 0.6 ms each, and none while paused.
+
+Round 9's frosted cards no longer boost saturation behind the blur, which in
+Safari pulled bright road markings through as a pale patch.
+
+Bundles:
+- the realm chunk is 23.9 KB (was 15.6);
+- Overland is 139.8 of 150 KiB (was 131.8);
+- the sketch world is unchanged at 85.8 KiB.

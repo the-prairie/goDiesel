@@ -195,72 +195,92 @@ async function intoReplay(page: Page) {
   return page.getByRole("group", { name: "Replay" });
 }
 
-test("in the replay, playback is one bar and leaving is its own control, clear of the card and of Google's credit", async ({ page }) => {
+test("in the replay the ridge is the control: one slider and a play button, Back on its own, Google's map ending where the ridge begins", async ({ page }) => {
   test.setTimeout(90_000);
-  const bar = await intoReplay(page);
-  const play = bar.getByRole("button", { name: /^(Play|Pause)$/ });
+  const group = await intoReplay(page);
+  const ridge = group.getByRole("slider", { name: "Route progress" });
+  const play = group.getByRole("button", { name: /^(Play|Pause)$/ });
   await expect(play).toHaveAccessibleName("Pause");
-  await expect(bar.getByRole("button", { name: "Back" })).toHaveCount(0);
+  await expect(group.getByRole("button", { name: "Back" })).toHaveCount(0);
   const back = page.getByRole("button", { name: "Back", exact: true });
-  await expect(back).toBeVisible();
-  const slider = bar.getByRole("slider", { name: "Route progress" });
-  for (const box of [await play.boundingBox(), await back.boundingBox()]) {
-    expect(box!.width).toBeGreaterThanOrEqual(44);
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-  }
-  expect((await slider.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  // Distance so far and in all, read at the bar.
-  await expect(bar).toContainText("32.6 km");
-  await expect(slider).toHaveAttribute("aria-valuetext", /^\d+\.\d of 32\.6 km$/);
-  // Leaving sits top-left, beside the route card, not under it.
-  const card = (await page.getByTestId("overland-realm-text-box").boundingBox())!;
   const leave = (await back.boundingBox())!;
   expect(leave.x).toBeLessThan(40);
   expect(leave.y).toBeLessThan(120);
-  expect(leave.x + leave.width <= card.x || leave.y + leave.height <= card.y).toBe(true);
-  // Google's credit keeps clear space above it.
+  for (const box of [leave, (await play.boundingBox())!]) {
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+  // Edge to edge along the bottom.
+  const strip = (await ridge.boundingBox())!;
+  expect(strip.x).toBe(0);
+  expect(strip.width).toBe(402);
+  expect(strip.y + strip.height).toBeCloseTo(874, 0);
+  // Google's credit stands on its map, above the ridge, uncovered.
   const credit = (await page.getByRole("button", { name: "Provider information fixture" }).boundingBox())!;
-  const transport = (await bar.boundingBox())!;
-  expect(credit.y - (transport.y + transport.height)).toBeGreaterThanOrEqual(12);
-  // A tap pauses and leaves no focus ring behind.
+  expect(credit.y + credit.height).toBeLessThanOrEqual(strip.y);
+  await expect(page.getByRole("button", { name: "Provider information fixture" })).toBeVisible();
+  // The time of day she was there, and where she stopped, from the recorded run.
+  await expect(ridge).toHaveAttribute("aria-valuetext", /^\d{1,2}:\d{2} (am|pm), \d+\.\d of 32\.6 km$/);
+  expect(Number(await ridge.getAttribute("data-stops"))).toBeGreaterThan(0);
+});
+
+test("the ridge moves by keyboard, arrows by 1% and shift by 5%, Home and End; Space plays and pauses; a ring only for the keyboard", async ({ page }) => {
+  test.setTimeout(90_000);
+  const group = await intoReplay(page);
+  const play = group.getByRole("button", { name: /^(Play|Pause)$/ });
   await play.click();
   await expect(play).toHaveAccessibleName("Play");
   expect(await play.evaluate((element) => element.matches(":focus-visible"))).toBe(false);
-});
-
-test("the replay's scrubber moves by keyboard, arrows by 1% and shift by 5%, Home and End, with a visible focus ring", async ({ page }) => {
-  test.setTimeout(90_000);
-  const bar = await intoReplay(page);
-  await bar.getByRole("button", { name: "Pause" }).click();
-  const slider = bar.getByRole("slider", { name: "Route progress" });
-  await slider.focus();
+  const ridge = group.getByRole("slider", { name: "Route progress" });
+  await ridge.focus();
   await page.keyboard.press("Home");
-  await expect(slider).toHaveAttribute("aria-valuetext", "0.0 of 32.6 km");
+  await expect(ridge).toHaveAttribute("aria-valuetext", /, 0\.0 of 32\.6 km$/);
   await page.keyboard.press("ArrowRight");
-  await expect(slider).toHaveAttribute("aria-valuetext", "0.3 of 32.6 km");
+  await expect(ridge).toHaveAttribute("aria-valuetext", /, 0\.3 of 32\.6 km$/);
   await page.keyboard.press("Shift+ArrowRight");
-  await expect(slider).toHaveAttribute("aria-valuetext", "2.0 of 32.6 km");
+  await expect(ridge).toHaveAttribute("aria-valuetext", /, 2\.0 of 32\.6 km$/);
   await page.keyboard.press("End");
-  await expect(slider).toHaveAttribute("aria-valuetext", "32.6 of 32.6 km");
-  // Keyboard focus shows a ring.
+  await expect(ridge).toHaveAttribute("aria-valuetext", /, 32\.6 of 32\.6 km$/);
+  await page.keyboard.press("Home");
+  await page.keyboard.press(" ");
+  await expect(play).toHaveAccessibleName("Pause");
+  await page.keyboard.press(" ");
+  await expect(play).toHaveAccessibleName("Play");
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.press("Tab");
-  expect(await slider.evaluate((element) => element.matches(":focus-visible"))).toBe(true);
+  expect(await page.evaluate(() => document.activeElement?.matches(":focus-visible"))).toBe(true);
 });
 
-test("dragging the replay's scrubber takes her along the route", async ({ page }) => {
+test("on the ridge a tap of the marker plays or pauses, a touch elsewhere takes her there, and a hold opens it until release", async ({ page }) => {
   test.setTimeout(90_000);
-  const bar = await intoReplay(page);
-  await bar.getByRole("button", { name: "Pause" }).click();
-  const slider = bar.getByRole("slider", { name: "Route progress" });
-  const box = (await slider.boundingBox())!;
-  await page.mouse.move(box.x + 4, box.y + box.height / 2);
+  const group = await intoReplay(page);
+  const play = group.getByRole("button", { name: /^(Play|Pause)$/ });
+  const ridge = group.getByRole("slider", { name: "Route progress" });
+  await play.click();
+  await expect(play).toHaveAccessibleName("Play");
+  // Tap the marker: plays, once.
+  const marker = (await play.boundingBox())!;
+  await page.mouse.click(marker.x + marker.width / 2, marker.y + marker.height / 2);
+  await expect(play).toHaveAccessibleName("Pause");
+  await page.mouse.click(marker.x + marker.width / 2, marker.y + marker.height / 2);
+  await expect(play).toHaveAccessibleName("Play");
+  // Touch a quarter of the way along: she goes there.
+  const strip = (await ridge.boundingBox())!;
+  await page.mouse.move(strip.x + strip.width * 0.25, strip.y + 120);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 6 });
+  await expect(ridge).toHaveAttribute("aria-valuetext", /, 8\.\d of 32\.6 km$/);
+  // Holding still opens the ridge round her; letting go settles it back.
+  await expect(ridge).toHaveAttribute("data-zoomed", "true");
+  // Let it open, as a thumb would before dragging.
+  await page.waitForTimeout(500);
+  await page.mouse.move(strip.x + strip.width * 0.25 + 80, strip.y + 120, { steps: 4 });
   await page.mouse.up();
-  const text = (await slider.getAttribute("aria-valuetext"))!;
-  expect(Number(text.split(" ")[0])).toBeGreaterThan(12);
-  expect(Number(text.split(" ")[0])).toBeLessThan(20);
+  await expect(ridge).toHaveAttribute("data-zoomed", "false");
+  // Zoomed, 80 px of drag moved her about 1.2 km, not 6.5.
+  const after = Number((await ridge.getAttribute("aria-valuetext"))!.split(", ")[1].split(" ")[0]);
+  expect(after).toBeGreaterThan(8.5);
+  expect(after).toBeLessThan(10.5);
+  await expect(play).toHaveAccessibleName("Play");
 });
 
 test("choosing a route and jumping in hands over to the 3D replay; Back returns to the sketch at that route", async ({ page }) => {
@@ -285,7 +305,8 @@ test("choosing a route and jumping in hands over to the 3D replay; Back returns 
   // A quiet position marker with a heading, not a figure.
   await expect(page.locator("[data-marker-kind]")).toHaveAttribute("data-marker-kind", "sketch-position");
   await expect(page.locator("[data-marker-kind] [data-marker-heading]")).toHaveCount(1);
-  await expect(page.getByTestId("overland-realm-controls").locator("canvas")).toHaveCount(0);
+  // No pixel art here: the ridge is the sketch's own drawing.
+  await expect(page.getByTestId("overland-realm-controls").locator("canvas.overland-pixels")).toHaveCount(0);
   // The sketch is out of the way and takes no input while the 3D world is up.
   await expect(page.locator(".sketch-stage")).toHaveAttribute("inert", "");
   // The cut is matched: the drawn city's camera stands where the replay's opens.

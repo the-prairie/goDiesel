@@ -1236,6 +1236,25 @@
         "declined"
       ],
       "identity": "a load id minted per attempt; firstViewDrawn, timedOut, failed and fadeFinished must name the current load"
+    },
+    {
+      "id": "sketch-ridge-gesture",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The sketch replay's ridge line under one pointer: a tap on the marker plays or pauses, a press elsewhere takes her there, a drag scrubs, a still hold opens the ridge to the 6 km round her until release; a cancelled pointer settles it back.",
+      "module": "app/src/labs/sketch/sketch-ridge-gesture.ts",
+      "transition": "reduceRidgeGesture",
+      "test": [
+        "app/src/labs/sketch/sketch-ridge-gesture.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/overland/overland-realm.tsx"
+      ],
+      "states": [
+        "idle",
+        "pressing"
+      ],
+      "identity": "the pointer id of the press; events for another pointer are ignored"
     }
   ]
 }
