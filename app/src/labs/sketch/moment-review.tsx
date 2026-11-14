@@ -5,6 +5,7 @@ import maplibregl from "@/providers/maplibre";
 import { initialAssignState, reduceAssign, type AssignEvent } from "@/labs/sketch/moment-assign-state";
 import type { MomentsData, Placement } from "@/labs/sketch/moment-catalog";
 import { footprintAt, streetFronts } from "@/labs/sketch/moment-place";
+import ReviewReadout from "@/labs/sketch/moment-review-readout";
 import "@/labs/sketch/moment-review.css";
 
 // Review mode (?review=1): placing, swapping and removing her moments on the
@@ -173,6 +174,7 @@ export default function MomentReview({ map, data, setData, placementTap }: Momen
 
   return (
     <>
+      <ReviewReadout map={map} />
       <p aria-live="polite" className="moment-review-status" data-phase={state.phase} data-testid="moment-review">
         {state.phase === "saving" ? "Saving…" : state.phase === "ready" ? (state.writer ? "Tap a building to place a moment." : "Viewing only: placing works on the laptop.") : ""}
       </p>

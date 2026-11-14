@@ -366,6 +366,9 @@ test("in review mode away from the laptop, a tap on a building says placing work
   await fakeWriter(page, { available: false });
   const building = await reviewWorld(page);
   await expect(page.getByTestId("moment-review")).toHaveText("Viewing only: placing works on the laptop.");
+  // The phone readout: one line of plain numbers to read out or paste.
+  await expect(page.getByTestId("sketch-readout")).toContainText(/frame \d+ ms average, \d+ ms worst \(last 3 s\) · tiles \d+ of \d+ drawn · last tile .+ · triangles [\d,]+ · canvas \d+×\d+ at \d+(\.\d+)?x · context lost \d+ times?/, { timeout: 5_000 });
+  await expect(page.getByTestId("sketch-readout").getByRole("button", { name: "Copy" })).toBeVisible();
   await page.mouse.click(building.x, building.y);
   await expect(page.getByRole("dialog", { name: "Place a moment" })).toContainText("Placing moments works on the laptop.");
 });

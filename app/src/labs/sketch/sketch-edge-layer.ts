@@ -308,6 +308,8 @@ export interface EdgeStats {
   /** Tiles the current view draws buildings from, and how many of those are on the GPU. */
   wanted: number;
   drawn: number;
+  /** How long the last tile took, from asking the worker to its answer; null before the first. */
+  lastTileMs: number | null;
 }
 
 function multiply(a: ArrayLike<number>, b: ArrayLike<number>): Float64Array {
@@ -371,6 +373,9 @@ export function createEdgeLayer({
   // MapLibre expects GL state to change and restores its own afterwards.
   const arrived: { key: string; edges: Float32Array; faces: ArrayBuffer; extent: number; version: number }[] = [];
   const pending = new Map<string, number>();
+  // When each tile was asked for, and how long the last one took to make (the review readout).
+  const sentAt = new Map<string, number>();
+  let lastTileMs: number | null = null;
   const failed = new Set<string>();
   const uniforms: Record<string, WebGLUniformLocation | null> = {};
   // Her routes on the ground, in the units of the tile they start in.
@@ -397,6 +402,7 @@ export function createEdgeLayer({
       if (tiles.get(key)?.version === version || arrived.some((item) => item.key === key && item.version === version)) continue;
       pending.set(key, version);
       const url = tilesUrl.replace("{z}", String(TILE_ZOOM)).replace("{x}", String(x)).replace("{y}", String(y));
+      sentAt.set(key, performance.now());
       worker!.postMessage({
         key,
         url,
@@ -414,6 +420,9 @@ export function createEdgeLayer({
       return;
     }
     pending.delete(message.key);
+    const asked = sentAt.get(message.key);
+    if (asked !== undefined) lastTileMs = performance.now() - asked;
+    sentAt.delete(message.key);
     if ("error" in message) {
       failed.add(message.key);
       return;
@@ -730,7 +739,7 @@ export function createEdgeLayer({
       }
       const wanted = want().map(({ x, y }) => tileKey(x, y));
       const drawn = wanted.filter((key) => tiles.has(key)).length;
-      return { tiles: tiles.size, segments, triangles: faces, pending: pending.size, explored: exploredCount, wanted: wanted.length, drawn };
+      return { tiles: tiles.size, segments, triangles: faces, pending: pending.size, explored: exploredCount, wanted: wanted.length, drawn, lastTileMs };
     },
   };
   return layer;
