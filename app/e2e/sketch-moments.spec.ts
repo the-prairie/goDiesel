@@ -105,10 +105,79 @@ test("several planted moments each stand on their own spot", async ({ page }) =>
       const p = map.project([at.lng, at.lat]);
       return { x: box.left + p.x, y: box.top + p.y };
     }, place.at);
+    // Looking straight down, its tap target is over its own spot (a few metres onto the roof, raised).
     const r = (await page.locator(`.sketch-moment[data-moment-id="${place.id}"]`).boundingBox())!;
-    expect(Math.abs(r.x + r.width / 2 - where.x)).toBeLessThan(1.5);
-    expect(Math.abs(r.y + r.height - where.y)).toBeLessThan(1.5);
+    expect(Math.hypot(r.x + r.width / 2 - where.x, r.y + r.height / 2 - where.y)).toBeLessThan(14);
   }
+});
+
+const MARKER = "No signal (example), a planted moment";
+const viewTo = (page: Page, camera: object) =>
+  page.evaluate((c) => {
+    const map = (window as unknown as { __sketch: { map: { jumpTo(o: object): void; once(e: string, f: () => void): void; triggerRepaint(): void } } }).__sketch.map;
+    map.jumpTo(c);
+  }, camera);
+/** How many frames the map draws in a second, left alone. */
+const framesInASecond = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        const map = (window as unknown as { __sketch: { map: { on(e: string, f: () => void): void; off(e: string, f: () => void): void } } }).__sketch.map;
+        let frames = 0;
+        const count = () => (frames += 1);
+        setTimeout(() => {
+          map.on("render", count);
+          setTimeout(() => {
+            map.off("render", count);
+            resolve(frames);
+          }, 1000);
+        }, 400);
+      }),
+  );
+const CITY = { center: [135.7698, 34.993], zoom: 12.6, pitch: 55, bearing: 0 };
+const STREET = { center: [135.76985, 34.99595], zoom: 17.9, pitch: 62, bearing: 5 };
+
+test("the marker is a beacon from city zoom and a hologram at street zoom: found by name, a 44 pt target, opening at both", async ({ page }) => {
+  test.setTimeout(90_000);
+  await noPrivateMoments(page);
+  await openWorld(page);
+  for (const camera of [CITY, STREET]) {
+    await viewTo(page, camera);
+    const moment = page.getByRole("button", { name: MARKER });
+    await expect(moment).toBeVisible();
+    const box = (await moment.boundingBox())!;
+    expect([box.width, box.height]).toEqual([44, 44]);
+    expect(box.x).toBeGreaterThan(0);
+    expect(box.y).toBeGreaterThan(0);
+    await moment.click();
+    const scene = page.getByRole("dialog", { name: "No signal (example)" });
+    await expect(scene).toBeVisible({ timeout: 15_000 });
+    await scene.getByRole("button", { name: "Back to the street" }).click();
+    await expect(scene).toHaveCount(0);
+  }
+});
+
+test("the marker moves only while it is on screen, and holds still with reduced motion", async ({ page }) => {
+  test.setTimeout(90_000);
+  await noPrivateMoments(page);
+  await openWorld(page);
+  await viewTo(page, STREET);
+  expect(await framesInASecond(page)).toBeGreaterThan(10);
+  // Looking somewhere else: once its tiles are in, the map goes back to idle.
+  await viewTo(page, { ...STREET, center: [135.74, 35.02] });
+  await page.waitForFunction(() => (window as unknown as { __sketch: { map: { loaded(): boolean } } }).__sketch.map.loaded());
+  await page.waitForTimeout(2500);
+  expect(await framesInASecond(page)).toBeLessThanOrEqual(2);
+});
+
+test("with reduced motion the marker does not turn, bob, pulse or scan", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await noPrivateMoments(page);
+  await openWorld(page);
+  await viewTo(page, STREET);
+  await expect(page.getByRole("button", { name: MARKER })).toBeVisible();
+  expect(await framesInASecond(page)).toBeLessThanOrEqual(2);
 });
 
 test("opening it takes the camera to the shop front, then the window: nine sets, muted, Sound on and off; Back returns her and focus", async ({ page }) => {
@@ -140,7 +209,8 @@ test("opening it takes the camera to the shop front, then the window: nine sets,
   await expect(scene).toHaveCount(0);
   const after = await camera(page);
   for (const key of ["lng", "lat", "zoom", "pitch", "bearing"] as const) expect(after[key]).toBeCloseTo(before[key], 5);
-  expect(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.momentId)).toBe("test-shop");
+  // Focus goes back to the moment within a frame or two of the world waking.
+  await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.momentId), { timeout: 500 }).toBe("test-shop");
   // Escape leaves as Back does.
   await moment.click();
   await expect(scene).toBeVisible({ timeout: 15_000 });

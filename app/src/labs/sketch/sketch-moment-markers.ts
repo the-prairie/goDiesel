@@ -1,35 +1,39 @@
-import type { Map as MapLibreMap, Marker } from "maplibre-gl";
+import type { Map as MapLibreMap } from "maplibre-gl";
 
 import type { CatalogEntry, Placement } from "@/labs/sketch/moment-catalog";
-
-type MapLibreModule = { Marker: new (options: { element: HTMLElement; anchor: "bottom" }) => Marker };
+import { hologramLayer } from "@/labs/sketch/moment-hologram";
 
 /**
- * Each placed moment as a button on its building front: a small shop
- * window, the one thing in colour and moving in the ink city (its flicker is
- * CSS, so nothing runs per frame). Shown from city zoom in.
+ * Each placed moment: a beacon from far that resolves into a hologram up
+ * close (moment-hologram, drawn in WebGL), and over it an invisible 44 pt
+ * button with the moment's name, for her tap and for assistive technology.
+ * Shown from city zoom in.
  */
-export function plantMoments(map: MapLibreMap, maplibregl: MapLibreModule, shown: { placement: Placement; entry: CatalogEntry }[], open: (placement: Placement, entry: CatalogEntry, button: HTMLElement) => void) {
+export function plantMoments(map: MapLibreMap, shown: { placement: Placement; entry: CatalogEntry }[], open: (placement: Placement, entry: CatalogEntry, button: HTMLElement) => void, reducedMotion = false) {
+  const overlay = document.createElement("div");
+  overlay.className = "sketch-moments";
+  const container = map.getContainer();
+  container.insertBefore(overlay, container.querySelector(".maplibregl-control-container"));
   const markers = shown.map(({ placement, entry }) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "sketch-moment";
     button.dataset.momentId = placement.id;
     button.setAttribute("aria-label", `${entry.title}, a planted moment`);
-    button.innerHTML = '<span class="sketch-moment-window"></span>';
+    button.style.transform = "translate(-999px, -999px)";
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       open(placement, entry, button);
     });
-    return new maplibregl.Marker({ element: button, anchor: "bottom" }).setLngLat([placement.at.lng, placement.at.lat]).addTo(map);
+    overlay.append(button);
+    return { placement, kind: entry.kind, button };
   });
-  const show = () => {
-    for (const marker of markers) marker.getElement().hidden = map.getZoom() < 10;
-  };
-  show();
-  map.on("zoomend", show);
+  // The drawn buildings know their roofs once their tiles are made.
+  const edges = () => (map.getLayer("building-edges") as unknown as { implementation?: { roofAt?: (lng: number, lat: number) => number | null } } | undefined)?.implementation;
+  const layer = hologramLayer(markers, { reducedMotion, roofAt: (lng, lat) => edges()?.roofAt?.(lng, lat) ?? null });
+  map.addLayer(layer);
   return () => {
-    map.off("zoomend", show);
-    for (const marker of markers) marker.remove();
+    if (map.getLayer(layer.id)) map.removeLayer(layer.id);
+    overlay.remove();
   };
 }

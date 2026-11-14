@@ -90,10 +90,13 @@ if (entry.includes("overland-world-mask")) {
 // the grey and colour split), measured at 85.8 KiB (page 52.4, worker 20.4).
 // 2026-11-14: 87 KiB for planted moments' hook in the world (86.4 KiB used);
 // the moments themselves load in their own chunks, budgeted below.
+// 2026-11-14: 88 KiB for the drawn buildings' roof heights (sketch-roof-tops:
+// each building's box and drawn top, sent with its tile), so a moment's marker
+// stands on the roof that is drawn; 87.0 KiB used.
 const sketchChunks = assets.filter((name) => /^sketch-.*\.js$/.test(name));
 let sketchBytes = 0;
 for (const name of sketchChunks) sketchBytes += (await stat(path.join(dist, "assets", name))).size;
-const sketchBudgetBytes = 87 * 1024;
+const sketchBudgetBytes = 88 * 1024;
 if (sketchChunks.length === 0) throw new Error("The sketch world's chunks are missing from the build.");
 if (sketchBytes > sketchBudgetBytes) {
   throw new Error(`The sketch world is ${(sketchBytes / 1024).toFixed(1)} KiB; budget is ${sketchBudgetBytes / 1024} KiB.`);
@@ -102,15 +105,25 @@ if (entry.includes("sketch-edge-worker") || entry.includes("building-edges")) {
   throw new Error("Initial shell unexpectedly contains the sketch world.");
 }
 
-// Planted moments (lab): the layer that places them and each kind's scene,
-// loaded only once the map is up and a moment is opened. 10.9 KiB when added
-// (2026-11-14, the tv-wall scene); 13.2 KiB with the hand-over that lines the
-// drawn shop up with her building (round 13), budget 12 → 14 KiB. Her catalog
-// view is its own page chunk.
-const momentChunks = assets.filter((name) => /^moment-.*\.js$/.test(name) && !name.startsWith("moment-review-"));
+// Planted moments (lab), budgeted by when they load (2026-11-14, round 13).
+// With the world: the catalog model, the layer that plants each moment and
+// draws its marker (the beacon that resolves into a hologram), and the
+// hand-over into a scene. 12.6 KiB with the hologram marker; budget 14 KiB.
+const SCENE_CHUNK = /^moment-(tv-wall)-.*\.js$/;
+const momentChunks = assets.filter((name) => /^moment-.*\.js$/.test(name) && !name.startsWith("moment-review-") && !SCENE_CHUNK.test(name));
 let momentBytes = 0;
 for (const name of momentChunks) momentBytes += (await stat(path.join(dist, "assets", name))).size;
-if (momentBytes > 14 * 1024) throw new Error(`Planted moments are ${(momentBytes / 1024).toFixed(1)} KiB; budget is 14 KiB.`);
+if (momentBytes > 14 * 1024) throw new Error(`Planted moments with the world are ${(momentBytes / 1024).toFixed(1)} KiB; budget is 14 KiB.`);
+// Each moment's scene, loaded only when she opens one of its kind
+// (2026-11-14): the tv-wall storefront, 7.5 KiB. Budget 8 KiB for each
+// scene. A second kind of scene gets its own 8 KiB (add it to SCENE_CHUNK),
+// not a share of this one.
+const sceneChunks = assets.filter((name) => SCENE_CHUNK.test(name));
+if (sceneChunks.length === 0) throw new Error("The moment scenes are missing from the build.");
+for (const name of sceneChunks) {
+  const bytes = (await stat(path.join(dist, "assets", name))).size;
+  if (bytes > 8 * 1024) throw new Error(`The moment scene ${name} is ${(bytes / 1024).toFixed(1)} KiB; budget is 8 KiB for each scene.`);
+}
 // Her review mode (placing and swapping, ?review=1 only): never loaded for a
 // visitor, so it is kept out of the planted-moments budget. 7.6 KiB when added
 // (2026-11-14).
@@ -123,5 +136,5 @@ let catalogBytes = 0;
 for (const name of catalogChunks) catalogBytes += (await stat(path.join(dist, "assets", name))).size;
 if (catalogBytes > 6 * 1024) throw new Error(`The moments catalog page is ${(catalogBytes / 1024).toFixed(1)} KiB; budget is 6 KiB.`);
 console.log(
-  `Bundle budget passed: initial shell ${(entryBytes / 1024).toFixed(1)} KiB; Replay and route detail remain lazy; Overland is ${(overlandBytes / 1024).toFixed(1)} KiB in ${overlandChunks.length} chunks; the town renderer is ${(townRendererBytes / 1024).toFixed(1)} KiB; the sketch world is ${(sketchBytes / 1024).toFixed(1)} KiB in ${sketchChunks.length} chunks; planted moments ${(momentBytes / 1024).toFixed(1)} KiB, their catalog ${(catalogBytes / 1024).toFixed(1)} KiB.`,
+  `Bundle budget passed: initial shell ${(entryBytes / 1024).toFixed(1)} KiB; Replay and route detail remain lazy; Overland is ${(overlandBytes / 1024).toFixed(1)} KiB in ${overlandChunks.length} chunks; the town renderer is ${(townRendererBytes / 1024).toFixed(1)} KiB; the sketch world is ${(sketchBytes / 1024).toFixed(1)} KiB in ${sketchChunks.length} chunks; planted moments ${(momentBytes / 1024).toFixed(1)} KiB with the world and ${sceneChunks.length} scene(s) within 8 KiB each, their catalog ${(catalogBytes / 1024).toFixed(1)} KiB.`,
 );

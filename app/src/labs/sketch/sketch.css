@@ -592,44 +592,31 @@
 }
 
 /* ---------------------------------------------------------------- planted moments
-   A small shop front on its building: the window is the one thing in colour
-   and moving in the ink city. CSS only, so nothing runs per frame. */
+   Over each marker, a layer of invisible buttons that the hologram layer
+   moves to what she sees. */
 
-.sketch-moment {
-  /* Absolute as MapLibre's marker class is: in normal flow, every marker
-     after the first would be pushed along by the ones before it. */
+.sketch-moments {
   position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* The marker itself is drawn in the world (moment-hologram); this is her
+   44 pt tap target over it, invisible until it has keyboard focus. */
+.sketch-moment {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 44px;
   height: 44px;
   padding: 0;
   border: 0;
+  border-radius: 50%;
   background: transparent;
   cursor: pointer;
+  pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
-}
-
-.sketch-moment::before {
-  position: absolute;
-  bottom: 4px;
-  left: 8px;
-  width: 28px;
-  height: 22px;
-  border: 1.5px solid #1b1a17;
-  border-radius: 2px;
-  background: #f6f5ef;
-  box-shadow: 0 0 14px 4px rgba(120, 185, 255, 0.55);
-  content: "";
-}
-
-.sketch-moment-window {
-  position: absolute;
-  bottom: 8px;
-  left: 12px;
-  width: 20px;
-  height: 13px;
-  border: 1px solid #1b1a17;
-  background: linear-gradient(90deg, #9fe6a8 0 33%, #a9cfff 33% 66%, #ffd9a6 66%);
-  animation: sketch-moment-flicker 1.6s steps(4) infinite;
 }
 
 .sketch-moment:focus {
@@ -637,19 +624,5 @@
 }
 
 .sketch-moment:focus-visible {
-  border-radius: 8px;
   outline: 3px solid #0a84ff;
-}
-
-@keyframes sketch-moment-flicker {
-  0% { filter: brightness(1.15) hue-rotate(0deg); }
-  25% { filter: brightness(0.8) hue-rotate(40deg); }
-  50% { filter: brightness(1.3) hue-rotate(-30deg); }
-  75% { filter: brightness(0.95) hue-rotate(90deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sketch-moment-window {
-    animation: none;
-  }
 }

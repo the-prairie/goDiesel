@@ -1,7 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 
-import maplibregl from "@/providers/maplibre";
 import { plantMoments } from "@/labs/sketch/sketch-moment-markers";
 import { initialMomentState, reduceMoment, type MomentCamera } from "@/labs/sketch/sketch-moment-state";
 import { frontCorners, type ScreenFront } from "@/labs/sketch/moment-handover";
@@ -39,13 +38,13 @@ export default function MomentLayer({ map, move, reducedMotion, review, onOpenCh
   const placementTap = useRef<((placement: Placement) => void) | null>(null);
   useEffect(
     () =>
-      plantMoments(map, maplibregl, shownMoments(moments), (placement, entry, button) => {
+      plantMoments(map, shownMoments(moments), (placement, entry, button) => {
         if (placementTap.current) return placementTap.current(placement);
         opener.current = { placement, entry, button };
         const center = map.getCenter();
         send({ type: "tapped", id: placement.id, from: { center: [center.lng, center.lat], zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() }, saveData: momentDataSaving(), clip: Boolean(entry.clip) });
-      }),
-    [map, moments],
+      }, reducedMotion),
+    [map, moments, reducedMotion],
   );
   useEffect(() => {
     onOpenChange(moment.phase !== "closed");
@@ -65,7 +64,14 @@ export default function MomentLayer({ map, move, reducedMotion, review, onOpenCh
     // Focus goes back to the moment once the world is no longer inert behind it.
     if (moment.phase === "closed" && opener.current) {
       const button = opener.current.button;
-      const frame = requestAnimationFrame(() => button.focus({ preventScroll: true }));
+      // The world wakes in its own render, which can land a frame or two later.
+      let tries = 0;
+      let frame = 0;
+      const focus = () => {
+        if (button.closest("[inert]") && (tries += 1) < 30) frame = requestAnimationFrame(focus);
+        else button.focus({ preventScroll: true });
+      };
+      frame = requestAnimationFrame(focus);
       return () => cancelAnimationFrame(frame);
     }
   }, [map, moment, move, onOpenChange]);

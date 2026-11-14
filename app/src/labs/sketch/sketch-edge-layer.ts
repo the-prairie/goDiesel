@@ -9,6 +9,7 @@
 // end of a stroke a little, lets it overshoot its corner and draws a second,
 // fainter stroke.
 
+import { roofAt } from "@/labs/sketch/sketch-roof-tops";
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 
 import type { EdgeRequest, EdgeResponse } from "@/labs/sketch/sketch-edge-worker";
@@ -364,6 +365,8 @@ export function createEdgeLayer({
   let worker: Worker | null = null;
   let stroke = STROKE[look];
   const tiles = new Map<string, TileDrawing>();
+  // Each tile's building tops, for whatever stands on a roof (sketch-roof-tops).
+  const tops = new Map<string, { tops: Float32Array; extent: number }>();
   // Tiles made by the worker, waiting to be uploaded inside `render`, where
   // MapLibre expects GL state to change and restores its own afterwards.
   const arrived: { key: string; edges: Float32Array; faces: ArrayBuffer; extent: number; version: number }[] = [];
@@ -415,6 +418,7 @@ export function createEdgeLayer({
       failed.add(message.key);
       return;
     }
+    tops.set(message.key, { tops: message.tops, extent: message.extent });
     arrived.push({ key: message.key, edges: message.edges, faces: message.faces, extent: message.extent, version: reveal ? message.version : version });
     exploredCount += message.explored.length;
     onExplored(message.explored);
@@ -528,6 +532,7 @@ export function createEdgeLayer({
       for (const [key, tile] of oldest) {
         release(g, tile);
         tiles.delete(key);
+        tops.delete(key);
       }
     }
   };
@@ -537,7 +542,7 @@ export function createEdgeLayer({
   /** Starts on exactly the tiles a camera that is not there yet will draw (the jump's landing). */
   const prefetchView = (camera: ViewCamera) => request(tilesForView(camera, TILE_ZOOM, maxTiles));
 
-  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; prefetchView(camera: ViewCamera): void; stats(): EdgeStats } = {
+  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; prefetchView(camera: ViewCamera): void; stats(): EdgeStats; roofAt(lng: number, lat: number): number | null } = {
     id: "building-edges",
     type: "custom",
     renderingMode: "3d",
@@ -691,6 +696,15 @@ export function createEdgeLayer({
       map?.triggerRepaint();
     },
     prefetchView,
+    /** The drawn roof's height in metres at a place, once its tile is made; else null. */
+    roofAt(lng: number, lat: number) {
+      const n = 2 ** TILE_ZOOM;
+      const s = Math.sin((lat * Math.PI) / 180);
+      const fx = ((lng + 180) / 360) * n;
+      const fy = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
+      const made = tops.get(tileKey(Math.floor(fx), Math.floor(fy)));
+      return made ? roofAt(made.tops, (fx - Math.floor(fx)) * made.extent, (fy - Math.floor(fy)) * made.extent) : null;
+    },
     setPaused(next: boolean) {
       paused = next;
       map?.triggerRepaint();

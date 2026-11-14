@@ -929,3 +929,60 @@ Bundles:
 - review mode: 7.6 of 10 KiB, its own budget, since only `?review=1`
   loads it;
 - catalog page: 2.4 of 6 KiB.
+
+**S33. The moment's marker: a beacon that resolves into a hologram.**
+- *From far* (city zoom, below 14.6): a thin column of light from the roof,
+  cyan at the base through pink to nothing, with a ring pulsing on the roof
+  and a pool of coloured light. It keeps its size on screen (150 px tall,
+  6 px wide), so it stands clear above the roofs.
+- *Up close* (street zoom, from 16.8): a see-through television floating
+  just above the roof, turning once in 9 s and bobbing.
+  - Its faces are translucent cyan, magenta and lime, with an inset outline
+    and moving scanlines; its screen shows colour bars.
+  - A short projection cone runs beneath it to the pool of light.
+  - It is real size (9 m across) up close, never under about 34 px across
+    on the way in.
+- *Between* (14.6 to 16.8, picked by eye in Kyoto): one continuous change.
+  The beam shortens and thins while the television fades and scales in
+  (`moment-hologram-math.ts`, smoothstep).
+- *A real 3D thing* (`moment-hologram.ts`): one WebGL custom layer after the
+  drawn buildings.
+  - It is depth-tested against them, so a taller building in front hides it.
+  - It stands 4 m onto the roof from the front, on the roof that is actually
+    drawn. The worker now sends each tile's building boxes and drawn tops
+    (`sketch-roof-tops.ts`), and the edge layer answers `roofAt`.
+  - The beam and the object are separate: the object comes from the
+    moment's kind.
+- *Tap and accessibility*: over each marker, an invisible 44 pt button with
+  the moment's name. The layer moves it each frame to what she sees (low on
+  the beam from far, the television up close), and it shows a ring only
+  with keyboard focus.
+- *Cost*: it asks for frames only while a marker is on screen and motion is
+  allowed. Off screen, or with reduced motion, the map goes idle as before.
+  Reduced motion: no spin, bob, pulse or scanline movement.
+- *Fixed on the way*: after Back, focus sometimes did not return to the
+  moment. The world wakes from `inert` in its own render, which could land
+  after the one frame the focus waited. It now waits until the world is
+  awake (at most 30 frames).
+- *Measured* (simulator Safari, production build, two runs each; the
+  example moment; 3 s per view after the map settled):
+
+  | View | Frames drawn a second | Frame interval, mean / p95 | Marker layer a frame |
+  |---|---|---|---|
+  | City zoom, marker on screen | 53, 56 | 19.1 / 24, 17.9 / 21 ms | 0.08, 0.10 ms |
+  | Street zoom, marker on screen | 28, 47 | 36.0 / 45, 21.5 / 26 ms | 0.11, 0.09 ms |
+  | None on screen | 0, 0 | 16.8 / 17, 16.7 / 17 ms | — |
+  | Without the layer (all three views) | 0 | 16.7 to 16.8 / 17 to 20 ms | — |
+
+  The layer itself costs about a tenth of a millisecond. The price of the
+  motion is the map redrawing every frame while a marker is on screen; with
+  none on screen, idle is unchanged. The simulator is not a phone: her
+  iPhone has not been measured.
+- *Landing after S33* (first jump, all drawn by landing every time):
+  Chromium production 2.88 / 2.89 s, Safari production 2.95 / 2.91 s;
+  Chromium 8790 2.89 / 2.90 s, Safari 8790 3.00 / 2.93 s. As in round 8.
+- *Bundles*: the sketch world is 87.0 of 88 KiB (the roof tops; budget
+  raised from 87). Planted moments are now budgeted by when they load:
+  12.6 of 14 KiB with the world (catalog, hand-over, layer with the
+  hologram), and each kind's scene within 8 KiB on opening (tv-wall 7.5).
+  A second kind of scene gets its own 8 KiB.

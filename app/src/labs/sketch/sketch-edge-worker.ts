@@ -17,7 +17,7 @@ export interface EdgeRequest {
 }
 
 export type EdgeResponse =
-  | { key: string; edges: Float32Array; faces: ArrayBuffer; extent: number; explored: ExploredId[]; version: number; buildings: number }
+  | { key: string; edges: Float32Array; faces: ArrayBuffer; tops: Float32Array; extent: number; explored: ExploredId[]; version: number; buildings: number }
   | { key: string; error: string };
 
 const scope = self as unknown as { onmessage: ((event: MessageEvent<EdgeRequest>) => void) | null; postMessage: (message: EdgeResponse, transfer?: Transferable[]) => void };
@@ -28,7 +28,7 @@ scope.onmessage = async (event) => {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const made = buildTile(new Uint8Array(await response.arrayBuffer()), key, reveal);
-    scope.postMessage({ key, ...made }, [made.edges.buffer, made.faces]);
+    scope.postMessage({ key, ...made }, [made.edges.buffer, made.faces, made.tops.buffer]);
   } catch (error) {
     scope.postMessage({ key, error: error instanceof Error ? error.message : String(error) });
   }

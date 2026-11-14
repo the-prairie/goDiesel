@@ -1,3 +1,4 @@
+import { TOP_STRIDE, topOf } from "@/labs/sketch/sketch-roof-tops";
 import type { ExploredId } from "@/labs/sketch/sketch-tile";
 import { nearBuildings } from "@/labs/sketch/sketch-faces";
 import { matchLandmarks, pointInRing, toriiFrom } from "@/labs/sketch/sketch-form";
@@ -104,6 +105,8 @@ export function buildTile(data: Uint8Array, key: string, reveal: TileReveal | nu
 
   const faces: Float32Array[] = [];
   const edges: Float32Array[] = [];
+  // Each building's box and drawn top, for whatever stands on a roof (a planted moment's marker).
+  const tops = new Float32Array(buildings.length * TOP_STRIDE);
   buildings.forEach((building, index) => {
     const ring = building.rings[0];
     const clipped = ring.some(([px, py]) => px < 0 || py < 0 || px > extent || py > extent);
@@ -122,6 +125,14 @@ export function buildTile(data: Uint8Array, key: string, reveal: TileReveal | nu
     });
     faces.push(mass.faces);
     edges.push(mass.edges);
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const [px, py] of ring) {
+      x0 = Math.min(x0, px);
+      y0 = Math.min(y0, py);
+      x1 = Math.max(x1, px);
+      y1 = Math.max(y1, py);
+    }
+    tops.set([x0, y0, x1, y1, topOf(mass.faces)], index * TOP_STRIDE);
   });
   // Trees where the data has parks and woods: their places are invented, the parks are not.
   edges.push(treesIn(context.parks, { metresPerUnit, seed: x * 92821 + y * 68917 }));
@@ -140,5 +151,5 @@ export function buildTile(data: Uint8Array, key: string, reveal: TileReveal | nu
   }
   const allEdges = dropTileEdges(join(edges), extent);
   const allFaces = packFaces(join(faces));
-  return { edges: allEdges, faces: allFaces, extent, explored, version: reveal?.version ?? 0, buildings: buildings.length };
+  return { edges: allEdges, faces: allFaces, tops, extent, explored, version: reveal?.version ?? 0, buildings: buildings.length };
 }
