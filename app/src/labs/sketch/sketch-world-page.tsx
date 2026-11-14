@@ -18,7 +18,7 @@ import { applySketchStyle } from "@/labs/sketch/sketch-apply";
 import { cityView, regionView, routeStartView, type SketchCamera } from "@/labs/sketch/sketch-camera";
 import { streetCamera } from "@/labs/sketch/sketch-street-camera";
 import { atlasFromRoute, crumbsOf, initialAtlasState, reduceAtlas, type AtlasState } from "@/labs/sketch/sketch-atlas-state";
-import { groupPlaces, placeFor } from "@/labs/sketch/sketch-places";
+import { atlasRoutes, groupPlaces, placeFor } from "@/labs/sketch/sketch-places";
 import { createEdgeLayer } from "@/labs/sketch/sketch-edge-layer";
 import { initialSketchMapState, reduceSketchMap } from "@/labs/sketch/sketch-map-state";
 import { sketchOptions, withOption, type SketchLook } from "@/labs/sketch/sketch-options";
@@ -55,8 +55,10 @@ const MomentLayer = lazy(() => import("@/labs/sketch/moment-layer"));
 
 // Every place she has run: her countries, their places and her routes there,
 // from the bundled route summaries (ADR-0004); full tracks load per place.
-const ENTRIES = buildOverlandEntries(routes);
-const EXPLORED = exploredRoutes(routes);
+// Her routes as she counts them: none she hid, and her own runs the data has not marked completed.
+const ATLAS_ROUTES = atlasRoutes(routes);
+const ENTRIES = buildOverlandEntries(ATLAS_ROUTES);
+const EXPLORED = exploredRoutes(ATLAS_ROUTES);
 const COUNTRIES = groupPlaces(ENTRIES.map((entry) => ({ slug: entry.slug, region: entry.place })));
 const lineOf = (slug: string) => EXPLORED.find((route) => route.slug === slug)?.line;
 const linesOf = (slugs: readonly string[]) => slugs.map((slug) => lineOf(slug)).filter((line): line is NonNullable<typeof line> => Boolean(line && line.length > 1));

@@ -387,6 +387,31 @@ test("her route named only \"Japan\" is in Kyoto now, as she decided: its card, 
   await expect(page.getByTestId("sketch-ridge")).toHaveAttribute("aria-valuetext", / km/, { timeout: 15_000 });
 });
 
+test("Rome shows her full 28.5 km run once, numbered as before; its ridge has hills and distance, no clock", async ({ page }) => {
+  test.setTimeout(90_000);
+  await installGoogleReplay(page, "ready");
+  await stubTiles(page);
+  await page.goto("/#/lab/sketch");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  const list = page.getByTestId("sketch-routes");
+  await list.getByRole("button", { name: /^Italy,/ }).click();
+  // Her Veneto route is in Valdobbiadene now; "Veneto" is gone.
+  await expect(list.getByRole("button", { name: /^Valdobbiadene, 1 route$/ })).toBeVisible();
+  await expect(list.getByRole("button", { name: /^Veneto,/ })).toHaveCount(0);
+  await list.getByRole("button", { name: /^Rome, 1 route$/ }).click();
+  const run = list.locator(".sketch-chip");
+  await expect(run).toHaveCount(1);
+  await expect(run).toHaveAttribute("data-slug", "3519505225411091950");
+  await expect(run).toContainText("020");
+  await expect(run).toContainText("breaking ankles on the Appian Way");
+  await expect(run).toContainText("28.5 km");
+  await run.click();
+  await page.getByTestId("sketch-jump").click();
+  await expect(page.locator("[data-jump-phase]")).toHaveAttribute("data-jump-phase", "realm", { timeout: 30_000 });
+  // Recorded without timing: distance only.
+  await expect(page.getByTestId("sketch-ridge")).toHaveAttribute("aria-valuetext", /^\d+\.\d of 28\.5 km$/, { timeout: 15_000 });
+});
+
 test("choosing a route and jumping in hands over to the 3D replay; Back returns to the sketch at that route", async ({ page }) => {
   test.setTimeout(90_000);
   await installGoogleReplay(page, "ready");

@@ -1158,3 +1158,32 @@ Bundles:
   route's own data already says the same place.
 - *Coming:* her names for splitting the Canary Islands, Mainland Greece,
   Crete and Bali go into the same table as their own commit.
+
+**S36, continued. The rest of her decisions (all confirmed by her).**
+- *Wide places split* into the places she ran, through the same table:
+  - Bali becomes Uluwatu, Canggu and Sidemen;
+  - Crete becomes Chania, Balos, Paleochora, Argyroupoli and Sfakia;
+  - Mainland Greece becomes Athens, Hydra and Delphi;
+  - the Canary Islands become Gran Canaria and Fuerteventura;
+  - her route labelled only "Veneto, Italy" is in Valdobbiadene, while
+    Treviso and Verona stay their own places;
+  - long routes stay under their named places.
+- *Rome is one run.* Her full 28.5 km run (3519505225411091950, imported
+  GPX, generated as "discovered", no timing) is shown as hers. The 18.3 km
+  partial Strava recording (8836227189) is hidden. Route numbers are
+  worked out by date over the routes shown, so the full run takes the
+  partial's 020 and no other number moves. It carries its own title.
+  - Its ridge is the first without timing in the real page: hills and
+    distance, no clock.
+  - Its colour comes from the 28.5 km track.
+- *The table now holds three kinds of entry,* each tested, and each
+  failing loudly once the source says the same:
+  - move a route to a place, new or existing (`OWNER_PLACES`);
+  - hide a route (`OWNER_HIDDEN`);
+  - count a not-completed route as hers (`OWNER_RUNS`).
+- *Counts:* 66 routes, 8 countries, 37 places.
+- *For the source fix later,* in `quests.json` and then a rebuild:
+  - the regions of the 25 moved routes;
+  - the lifecycle of 3519505225411091950;
+  - the duplicate 8836227189.
+  Then delete their entries here.
