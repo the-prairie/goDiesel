@@ -99,12 +99,12 @@ These describe the code as it is. The tables below list each lifecycle; these no
 
 | Kind | Entries |
 | --- | --- |
-| `reducer` | 38 |
+| `reducer` | 42 |
 | `disposition` | 1 |
 | `protocol` | 3 |
 | `derived` | 7 |
 | `left-implicit` | 10 |
-| total | 59 |
+| total | 63 |
 
 ### Reducers
 
@@ -148,6 +148,10 @@ These describe the code as it is. The tables below list each lifecycle; these no
 | `admin-ui-classifier` | Standalone admin classifier start and status polling, including a run that stopped early. | `admin-ui/classifier-state.ts` | `reduceClassifier` | `start:idle`, `start:starting`, `poll:idle`, `poll:checking`, `poll:failed`, `poll:running`, `poll:complete`, `notice:runFailed` | requestId for start; pollId for status |
 | `admin-rebuild` | One background build.py run at a time in the owner server. | `admin_rebuild.py` | `reduce_rebuild` | `idle`, `running`, `succeeded`, `failed` | run id; succeed and fail must name the running id |
 | `admin-classify` | The owner server's background region classifier and its snapshot phase. | `admin_classify.py` | `reduce_classify` | `idle`, `running`, `finished`, `failed` | none; admin.py serialises events under a lock, a second start while running is a no-op, and progress must be the next count |
+| `sketch-map` | The sketch world's MapLibre map: it loads, is ready once its style has drawn, is unavailable without WebGL, and is degraded (paper and her routes, still usable) while its tiles fail, recovering when they load again. | `app/src/labs/sketch/sketch-map-state.ts` | `reduceSketchMap` | `idle`, `loading`, `ready`, `degraded`, `unavailable` | a load id per map; events from an earlier load are ignored |
+| `sketch-handover` | The sketch world's hand-over from the drawn (OpenStreetMap) city to the real-geometry (Google Photorealistic 3D) sketch: zooming into a covered city on a capable device loads the real city while the drawn one stays; it fades in once its first view is drawn, is declined if too slow or failing, and fades out and is torn down below the exit zoom. | `app/src/labs/sketch/sketch-handover-state.ts` | `reduceHandover` | `drawn`, `loading`, `fadingIn`, `real`, `fadingOut`, `declined` | a load id minted per attempt; firstViewDrawn, timedOut, failed and fadeFinished must name the current load |
+| `sketch-moment` | A planted moment in the sketch world, opened: a tap remembers the camera and approaches the shop front; the scene opens muted with its clip loading, held under Save-Data until asked, or showing no signal when the entry has no clip or it fails; sound is hers to turn on; Back or Escape leaves and the camera returns to where she was. | `app/src/labs/sketch/sketch-moment-state.ts` | `reduceMoment` | `closed`, `approaching`, `open`, `leaving` | the placement id of the moment opened; one at a time |
+| `sketch-ridge-gesture` | The sketch replay's ridge line under one pointer: a tap on the marker plays or pauses, a press elsewhere takes her there, a drag scrubs, a still hold opens the ridge to the 6 km round her until release; a cancelled pointer settles it back. | `app/src/labs/sketch/sketch-ridge-gesture.ts` | `reduceRidgeGesture` | `idle`, `pressing` | the pointer id of the press; events for another pointer are ignored |
 
 ### Dispositions
 

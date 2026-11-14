@@ -53,3 +53,11 @@ node_modules/
 # Local experiments and unrelated build output, not part of goDiesel
 /lottie-player/
 /target/
+
+# Natural Earth downloads for the shelved Overland world map build (wip/overland-shelved).
+app/.cache/
+
+# Planted moments (sketch world): her clips, catalog and placements are her
+# own content. They never enter git; make-dist ships only entries she flags
+# public (app/scripts/moments-dist.mjs).
+/app/public/moments/

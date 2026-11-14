@@ -45,6 +45,19 @@ export function overlandTownRealmPath(townSlug: string, routeSlug: string) {
   return `${OVERLAND_LAB_PATH}/town/${encodeURIComponent(townSlug)}/${encodeURIComponent(routeSlug)}/3d`;
 }
 
+export const SKETCH_LAB_PATH = "/lab/sketch";
+
+/** The sketch world, with its query (review options, chosen route) kept. */
+export function sketchWorldPath(search = "") {
+  return search ? `${SKETCH_LAB_PATH}?${search}` : SKETCH_LAB_PATH;
+}
+
+/** A route's 3D world, jumped into from the sketch. */
+export function sketchRealmPath(slug: string, search = "") {
+  const path = `${SKETCH_LAB_PATH}/${encodeURIComponent(slug)}/3d`;
+  return search ? `${path}?${search}` : path;
+}
+
 function encodedSlug(slug: string) {
   return encodeURIComponent(slug);
 }

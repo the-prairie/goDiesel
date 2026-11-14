@@ -1191,6 +1191,92 @@
       ],
       "identity": null,
       "reason": "The store is the record. FileCourseStore and R2CourseStore implement CourseStore with no runtime phase."
+    },
+    {
+      "id": "sketch-map",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The sketch world's MapLibre map: it loads, is ready once its style has drawn, is unavailable without WebGL, and is degraded (paper and her routes, still usable) while its tiles fail, recovering when they load again.",
+      "module": "app/src/labs/sketch/sketch-map-state.ts",
+      "transition": "reduceSketchMap",
+      "test": [
+        "app/src/labs/sketch/sketch-map-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/sketch/sketch-world-page.tsx"
+      ],
+      "states": [
+        "idle",
+        "loading",
+        "ready",
+        "degraded",
+        "unavailable"
+      ],
+      "identity": "a load id per map; events from an earlier load are ignored"
+    },
+    {
+      "id": "sketch-handover",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The sketch world's hand-over from the drawn (OpenStreetMap) city to the real-geometry (Google Photorealistic 3D) sketch: zooming into a covered city on a capable device loads the real city while the drawn one stays; it fades in once its first view is drawn, is declined if too slow or failing, and fades out and is torn down below the exit zoom.",
+      "module": "app/src/labs/sketch/sketch-handover-state.ts",
+      "transition": "reduceHandover",
+      "test": [
+        "app/src/labs/sketch/sketch-handover-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/sketch/sketch-world-page.tsx"
+      ],
+      "states": [
+        "drawn",
+        "loading",
+        "fadingIn",
+        "real",
+        "fadingOut",
+        "declined"
+      ],
+      "identity": "a load id minted per attempt; firstViewDrawn, timedOut, failed and fadeFinished must name the current load"
+    },
+    {
+      "id": "sketch-moment",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "A planted moment in the sketch world, opened: a tap remembers the camera and approaches the shop front; the scene opens muted with its clip loading, held under Save-Data until asked, or showing no signal when the entry has no clip or it fails; sound is hers to turn on; Back or Escape leaves and the camera returns to where she was.",
+      "module": "app/src/labs/sketch/sketch-moment-state.ts",
+      "transition": "reduceMoment",
+      "test": [
+        "app/src/labs/sketch/sketch-moment-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/sketch/moment-layer.tsx",
+        "app/src/labs/sketch/moment-tv-wall.tsx"
+      ],
+      "states": [
+        "closed",
+        "approaching",
+        "open",
+        "leaving"
+      ],
+      "identity": "the placement id of the moment opened; one at a time"
+    },
+    {
+      "id": "sketch-ridge-gesture",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "The sketch replay's ridge line under one pointer: a tap on the marker plays or pauses, a press elsewhere takes her there, a drag scrubs, a still hold opens the ridge to the 6 km round her until release; a cancelled pointer settles it back.",
+      "module": "app/src/labs/sketch/sketch-ridge-gesture.ts",
+      "transition": "reduceRidgeGesture",
+      "test": [
+        "app/src/labs/sketch/sketch-ridge-gesture.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/overland/overland-realm.tsx"
+      ],
+      "states": [
+        "idle",
+        "pressing"
+      ],
+      "identity": "the pointer id of the press; events for another pointer are ignored"
     }
   ]
 }

@@ -19,6 +19,12 @@ export function usePhone() {
 
 // The handheld's keys and labels, shared by the world, the entry and the realm.
 
+/** A key's label in the given skin: Overland's pixel font, or the sketch's plain ink text. */
+export function SkinLabel({ text, skin, bold = false, colour }: { text: string; skin: "pixel" | "sketch"; bold?: boolean; colour?: string }) {
+  if (skin === "sketch") return <span className={bold ? "sketch-label sketch-label-bold" : "sketch-label"}>{text}</span>;
+  return <PixelLabel bold={bold} colour={colour} scale={2} text={text} />;
+}
+
 /** A label drawn in the Overland font; the button around it carries the name. */
 export function PixelLabel({ text, colour = C.ink, bold = false, scale }: { text: string; colour?: string; bold?: boolean; scale: number }) {
   const ref = useRef<HTMLCanvasElement>(null);

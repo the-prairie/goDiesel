@@ -1,0 +1,653 @@
+/* The sketch world: ink on paper. Scoped to .sketch. */
+
+.sketch {
+  --sk-paper: #fbfbf8;
+  --sk-ink: #1d1d1f;
+  --sk-faint: #8d8d8a;
+  --sk-red: #d9412b;
+  --sk-gap: 8px;
+  --sk-top: calc(10px + var(--safe-area-top, env(safe-area-inset-top, 0px)));
+  --sk-bottom: calc(10px + var(--safe-area-bottom, env(safe-area-inset-bottom, 0px)));
+  --sk-left: calc(10px + var(--safe-area-left, env(safe-area-inset-left, 0px)));
+  --sk-right: calc(10px + var(--safe-area-right, env(safe-area-inset-right, 0px)));
+  padding: 0;
+  display: block;
+  background: var(--sk-paper);
+  overflow: hidden;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.sketch[data-look="pencil"] {
+  --sk-paper: #f5f2ea;
+  --sk-ink: #45443f;
+}
+
+.sketch-world {
+  position: fixed;
+  inset: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--sk-paper);
+  color: var(--sk-ink);
+}
+
+.sketch-stage,
+.sketch-map,
+/* MapLibre makes its container relative; ours fills the stage. */
+.sketch .sketch-map.maplibregl-map {
+  position: absolute;
+  inset: 0;
+}
+
+.sketch-map:focus-visible,
+.sketch-map canvas:focus-visible {
+  outline: 2px solid var(--sk-ink);
+  outline-offset: -4px;
+}
+
+/* The real city: Google's 3D drawn as the sketch, over the drawn city. The
+   camera is MapLibre's, so the layer takes no input itself. */
+.sketch-real-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sketch-real-layer .cesium-viewer,
+.sketch-real-layer .cesium-widget {
+  position: absolute;
+  inset: 0;
+}
+
+/* Google's logo and data line, unstyled and uncovered, sit just above
+   OpenStreetMap's credit. Cesium writes its own inline bottom offset on this
+   box, so the lift is a margin on top of it (as Atlas does). Only the band
+   behind them is ours: Cesium draws Google's logo light, for a photograph,
+   and on paper it would vanish. */
+.sketch .sketch-real-layer .cesium-viewer-bottom {
+  margin-bottom: var(--sk-credit, 24px);
+  width: fit-content;
+  max-width: calc(100% - 10px);
+  background: rgba(20, 20, 22, 0.78);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+
+/* Paper grain for the pencil look: a fixed fibre texture, multiplied in. */
+.sketch-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.32;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.42  0 0 0 0 0.36  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.sketch-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.sketch-ui > * {
+  pointer-events: auto;
+}
+
+.sketch-key,
+.sketch-chip,
+.sketch-chip-option {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid var(--sk-ink);
+  border-radius: 2px;
+  background: var(--sk-paper);
+  color: var(--sk-ink);
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 rgba(29, 29, 31, 0.18);
+}
+
+.sketch-key:focus-visible,
+.sketch-chip:focus-visible,
+.sketch-chip-option:focus-visible {
+  outline: 2px solid var(--sk-red);
+  outline-offset: 2px;
+}
+
+.sketch-key-square {
+  width: 44px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.sketch-top {
+  position: absolute;
+  top: var(--sk-top);
+  left: var(--sk-left);
+  right: var(--sk-right);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sk-gap);
+  pointer-events: none;
+}
+
+.sketch-top > * {
+  pointer-events: auto;
+}
+
+.sketch-places {
+  display: flex;
+  gap: var(--sk-gap);
+}
+
+.sketch-review {
+  position: absolute;
+  top: calc(var(--sk-top) + 54px);
+  left: var(--sk-left);
+  right: var(--sk-right);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px dashed var(--sk-faint);
+  background: color-mix(in srgb, var(--sk-paper) 88%, transparent);
+  max-width: 560px;
+}
+
+.sketch-review-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sk-faint);
+  padding: 0 4px;
+}
+
+.sketch-chip-option {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+  box-shadow: none;
+}
+
+.sketch-chip-option[aria-pressed="true"],
+.sketch-chip[aria-pressed="true"] {
+  background: var(--sk-ink);
+  color: var(--sk-paper);
+}
+
+.sketch-controls {
+  position: absolute;
+  right: var(--sk-right);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sketch-routes {
+  position: absolute;
+  left: var(--sk-left);
+  right: var(--sk-right);
+  /* Above the map's credit, which is always shown in full. */
+  bottom: calc(var(--sk-credit, 24px) + var(--sk-credit-real, 0px) + 8px);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sk-gap);
+  pointer-events: none;
+}
+
+.sketch-routes > * {
+  pointer-events: auto;
+}
+
+.sketch-chips {
+  display: flex;
+  gap: var(--sk-gap);
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.sketch-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.sketch-chip {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: baseline;
+  max-width: min(280px, 70vw);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.sketch-chip-number {
+  grid-row: 1 / span 2;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--sk-red);
+}
+
+.sketch-chip[aria-pressed="true"] .sketch-chip-number {
+  color: #ffb4a6;
+}
+
+/* Her titles are shown whole, exactly as she wrote them: they wrap, never cut. */
+.sketch-chip-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sketch-chip-km {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.sketch-jump {
+  flex: none;
+  background: var(--sk-red);
+  border-color: var(--sk-red);
+  color: #fff;
+  font-weight: 600;
+}
+
+.sketch-status {
+  position: absolute;
+  left: var(--sk-left);
+  right: var(--sk-right);
+  top: calc(var(--sk-top) + 54px);
+  margin: 0 auto;
+  max-width: 420px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--sk-ink);
+  background: var(--sk-paper);
+  font-size: 14px;
+  z-index: 3;
+}
+
+/* The map's credit, drawn in the sketch's own ink, always shown. */
+.sketch .maplibregl-ctrl-attrib {
+  max-width: 100vw;
+  background: color-mix(in srgb, var(--sk-paper) 90%, transparent);
+  color: var(--sk-ink);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.sketch .maplibregl-ctrl-attrib-button {
+  display: none;
+}
+
+.sketch .maplibregl-ctrl-attrib a {
+  color: var(--sk-ink);
+}
+
+.sketch .maplibregl-ctrl-bottom-right {
+  bottom: var(--safe-area-bottom, env(safe-area-inset-bottom, 0px));
+  right: var(--safe-area-right, env(safe-area-inset-right, 0px));
+}
+
+@media (max-width: 767px) {
+  .sketch-routes {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sketch-jump {
+    align-self: flex-start;
+  }
+  .sketch-review {
+    top: calc(var(--sk-top) + 50px);
+  }
+}
+
+/* While the first view draws: a quiet line, a pen moving along under it. */
+.sketch-status[data-loading="true"] {
+  border-style: dashed;
+  text-align: center;
+  font-style: italic;
+}
+
+.sketch-status[data-loading="true"]::after {
+  content: "";
+  display: block;
+  height: 1.5px;
+  margin-top: 8px;
+  background: linear-gradient(90deg, transparent, var(--sk-ink), transparent) 0 0 / 40% 100% no-repeat;
+  animation: sketch-pen 1.4s ease-in-out infinite;
+}
+
+@keyframes sketch-pen {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sketch-status[data-loading="true"]::after {
+    animation: none;
+    background-size: 100% 100%;
+  }
+}
+
+/* ---------------------------------------------------------------- inside the 3D world
+   The jump's boxes, keys and marker in the sketch's language: ink line on
+   paper, the one red accent. Same elements and behaviour as Overland's
+   pixel versions, restyled. */
+
+[data-skin="sketch"] .overland-key,
+[data-skin="sketch"].overland-realm-controls .overland-key {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
+  border: 1.5px solid #1d1d1f;
+  border-radius: 2px;
+  background: #fbfbf8;
+  box-shadow: 2px 2px 0 rgba(29, 29, 31, 0.18);
+  color: #1d1d1f;
+  image-rendering: auto;
+}
+
+[data-skin="sketch"].overland-realm-controls .overland-key.overland-key-play,
+[data-skin="sketch"] .overland-key.overland-key-play {
+  background: #d9412b;
+  border-color: #d9412b;
+  color: #fff;
+}
+
+.sketch-label {
+  font: 500 15px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.03em;
+  color: inherit;
+}
+
+.sketch-label-bold {
+  font-weight: 650;
+}
+
+.overland-realm-text-box[data-skin="sketch"] {
+  height: auto;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sketch-story-card,
+.sketch-moment-card {
+  padding: 10px 14px 12px;
+  border: 1.5px solid #1d1d1f;
+  border-radius: 2px;
+  background: rgba(251, 251, 248, 0.96);
+  box-shadow: 3px 3px 0 rgba(29, 29, 31, 0.16);
+  color: #1d1d1f;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.sketch-box-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #d9412b;
+}
+
+.sketch-box-progress {
+  color: #6d6d6a;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.sketch-box-tag {
+  padding: 1px 6px;
+  border: 1px solid #1d1d1f;
+  color: #1d1d1f;
+  letter-spacing: 0.06em;
+}
+
+.sketch-box-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.sketch-box-body {
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid #cfcfca;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #3a3a38;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.overland-moment[data-skin="sketch"] .sketch-box-body {
+  -webkit-line-clamp: 6;
+}
+
+[data-skin="sketch"] .overland-scrub {
+  accent-color: #d9412b;
+}
+
+.overland-jump-status-layer[data-skin="sketch"] .overland-jump-status {
+  border: 1.5px solid #1d1d1f;
+  background: #fbfbf8;
+  color: #1d1d1f;
+  image-rendering: auto;
+}
+
+/* While Google's city loads after the dive: the drawing stays, with a plain word. */
+.overland-jump-status-layer[data-skin="sketch"] .overland-jump-travel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sketch-travel-note {
+  padding: 8px 12px;
+  border: 1.5px solid #1d1d1f;
+  background: #fbfbf8;
+  color: #1d1d1f;
+  font: 500 14px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 2px 2px 0 rgba(29, 29, 31, 0.18);
+}
+
+/* ---------------------------------------------------------------- the replay
+   Round 9's Back and cards over Google's world: frosted paper, rounded,
+   softly shadowed. No saturation boost: in Safari it pulled bright road
+   markings through the blur as a pale patch. Round 11: the ridge line on a
+   paper strip along the bottom, below Google's map. */
+
+.sketch-replay-leave,
+.overland-realm-text-box[data-skin="sketch"] .sketch-story-card,
+.overland-moment[data-skin="sketch"] .sketch-moment-card {
+  background: rgba(251, 251, 248, 0.93);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 0 0 0.5px rgba(29, 29, 31, 0.1), 0 6px 20px rgba(16, 22, 24, 0.2);
+}
+
+.overland-realm-text-box[data-skin="sketch"] .sketch-story-card,
+.overland-moment[data-skin="sketch"] .sketch-moment-card {
+  border: 0;
+  border-radius: 16px;
+  padding: 10px 14px 12px;
+}
+
+.sketch-replay-leave {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  place-items: center;
+  color: #1d1d1f;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sketch-ridge-strip {
+  position: absolute;
+  z-index: 2;
+  background: #f4f2ec;
+  box-shadow: 0 -0.5px 0 rgba(29, 29, 31, 0.25);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.sketch-ridge {
+  position: relative;
+  outline: none;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sketch-ridge:active {
+  cursor: grabbing;
+}
+
+.sketch-ridge canvas {
+  display: block;
+}
+
+.sketch-ridge-readout {
+  position: absolute;
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 99px;
+  background: #1d1d1f;
+  color: #f4f2ec;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 16px;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.sketch-ridge-play {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Keyboard focus only: a tap never leaves a ring behind. */
+.sketch-replay-leave:focus,
+.sketch-ridge-play:focus {
+  outline: none;
+}
+
+.sketch-replay-leave:focus-visible,
+.sketch-ridge-play:focus-visible,
+.sketch-ridge:focus-visible {
+  outline: 3px solid #0a84ff;
+  outline-offset: 2px;
+}
+
+.sketch-ridge:focus-visible {
+  outline-offset: -3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sketch-replay-leave {
+    transition: transform 120ms ease-out;
+  }
+
+  .sketch-replay-leave:active {
+    transform: scale(0.92);
+  }
+}
+
+/* ---------------------------------------------------------------- planted moments
+   A small shop front on its building: the window is the one thing in colour
+   and moving in the ink city. CSS only, so nothing runs per frame. */
+
+.sketch-moment {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sketch-moment::before {
+  position: absolute;
+  bottom: 4px;
+  left: 8px;
+  width: 28px;
+  height: 22px;
+  border: 1.5px solid #1b1a17;
+  border-radius: 2px;
+  background: #f6f5ef;
+  box-shadow: 0 0 14px 4px rgba(120, 185, 255, 0.55);
+  content: "";
+}
+
+.sketch-moment-window {
+  position: absolute;
+  bottom: 8px;
+  left: 12px;
+  width: 20px;
+  height: 13px;
+  border: 1px solid #1b1a17;
+  background: linear-gradient(90deg, #9fe6a8 0 33%, #a9cfff 33% 66%, #ffd9a6 66%);
+  animation: sketch-moment-flicker 1.6s steps(4) infinite;
+}
+
+.sketch-moment:focus {
+  outline: none;
+}
+
+.sketch-moment:focus-visible {
+  border-radius: 8px;
+  outline: 3px solid #0a84ff;
+}
+
+@keyframes sketch-moment-flicker {
+  0% { filter: brightness(1.15) hue-rotate(0deg); }
+  25% { filter: brightness(0.8) hue-rotate(40deg); }
+  50% { filter: brightness(1.3) hue-rotate(-30deg); }
+  75% { filter: brightness(0.95) hue-rotate(90deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sketch-moment-window {
+    animation: none;
+  }
+}

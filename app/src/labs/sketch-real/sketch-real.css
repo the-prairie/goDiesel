@@ -1,0 +1,94 @@
+/* SPIKE: the sketch over Google's 3D city. Lab only. */
+
+.sketch-real {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: #fbfaf6;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: #1d1d1f;
+}
+
+.sketch-real-map,
+.sketch-real-map .cesium-viewer,
+.sketch-real-map .cesium-widget {
+  position: absolute;
+  inset: 0;
+}
+
+/* The panel sits top-left, clear of the credits Cesium shows along the bottom. */
+.sketch-real-panel {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  display: grid;
+  gap: 6px;
+  max-width: min(320px, calc(100vw - 20px));
+  padding: 10px 12px;
+  border: 1.5px solid #1d1d1f;
+  background: rgba(251, 250, 246, 0.94);
+  font-size: 14px;
+}
+
+.sketch-real-badge {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8d8d8a;
+}
+
+.sketch-real-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+
+.sketch-real-row input[type="range"] {
+  flex: 1;
+  min-height: 44px;
+}
+
+.sketch-real-row input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+}
+
+.sketch-real-row button {
+  min-width: 64px;
+  min-height: 44px;
+  border: 1.5px solid #1d1d1f;
+  background: #fbfaf6;
+  font: inherit;
+}
+
+.sketch-real-status {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 10px 14px;
+  border: 1.5px solid #1d1d1f;
+  background: #fbfaf6;
+}
+
+/* Keep the renderer's own logo clear of Google's, as the policy asks. */
+.sketch-real .cesium-credit-logoContainer {
+  margin-right: 14px;
+}
+
+/* Google's logo in Cesium's credits is drawn light, for a photo behind it.
+   On paper it would vanish, so the credits sit on a dark band: the logo and
+   the data line stay legible, unaltered and uncovered. */
+.sketch-real .cesium-widget-credits {
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: rgba(20, 20, 22, 0.78);
+  color: #fff;
+}
+
+.sketch-real .cesium-widget-credits a {
+  color: #fff;
+}

@@ -20,7 +20,7 @@ import {
   type TownCover,
   type OverlandJumpEvent,
 } from "@/labs/overland/overland-jump-state";
-import { Key, PixelLabel } from "@/labs/overland/overland-ui";
+import { Key, SkinLabel } from "@/labs/overland/overland-ui";
 import type { GoogleRendererUnavailableReason, GoogleRouteNavigatorStatus } from "@/surfaces/replay/renderers/google-renderer-state";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
 
@@ -61,7 +61,7 @@ export function useRealmViewport(): RealmViewport {
 /** The box's padding, gap and its one key, in CSS pixels. */
 const STATUS_KEY_ROOM = 18 + 8 + 6 + 96;
 
-function StatusBox({ viewport, testId, message, children }: { viewport: RealmViewport; testId: string; message: string; children: React.ReactNode }) {
+function StatusBox({ viewport, testId, message, children, skin }: { viewport: RealmViewport; testId: string; message: string; children: React.ReactNode; skin: "pixel" | "sketch" }) {
   const { controls } = realmLayout(viewport, 0);
   return (
     <div
@@ -73,7 +73,7 @@ function StatusBox({ viewport, testId, message, children }: { viewport: RealmVie
       <p className="overland-jump-status-text">
         <span className="sr-only">{message}</span>
         {wrapForBox(message, Math.floor((controls.width - STATUS_KEY_ROOM) / 2)).map((line) => (
-          <PixelLabel key={line} scale={2} text={line} />
+          <SkinLabel key={line} skin={skin} text={line} />
         ))}
       </p>
       {children}
@@ -108,6 +108,8 @@ export interface OverlandJumpProps {
   container?: HTMLElement | null;
   /** How the town should cover the live map, at every phase. */
   onCover?: (cover: TownCover) => void;
+  /** The look of what is drawn over the 3D world: Overland's pixels, or the sketch's ink and paper. */
+  skin?: "pixel" | "sketch";
 }
 
 /**
@@ -115,7 +117,7 @@ export interface OverlandJumpProps {
  * owns the phases; this component owns the timers, the dive, and the cover
  * drawn over the live map, and dispatches only phase changes.
  */
-export function OverlandJump({ entry, map, transition, entrance, miniMapRect, onExit, cover, container, onCover }: OverlandJumpProps) {
+export function OverlandJump({ entry, map, transition, entrance, miniMapRect, onExit, cover, container, onCover, skin = "pixel" }: OverlandJumpProps) {
   const town = cover !== undefined;
   const reducedMotion = useReducedMotion();
   const viewport = useRealmViewport();
@@ -374,6 +376,7 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
       data-entrance={entrance}
       data-jump-phase={phase}
       data-pixel-level={presentation.pixelLevel}
+      data-skin={skin}
       data-testid="overland-jump"
       data-transition={transition}
       ref={rootRef}
@@ -389,6 +392,7 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
             presentation={presentation}
             reducedMotion={reducedMotion}
             route={detail.route}
+            skin={skin}
             viewport={viewport}
           />
         </Suspense>
@@ -415,26 +419,30 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
       />
       )}
     </div>
-    <div className={`overland-jump-status-layer${town ? " overland-jump-town-status" : ""}`}>
+    <div className={`overland-jump-status-layer${town ? " overland-jump-town-status" : ""}`} data-skin={skin}>
       {phase === "holding" && town ? (
         <div className="overland-jump-travel" data-testid="overland-jump-travel" role="status" style={{ right: 12 + viewport.safe.right, bottom: 48 + viewport.safe.bottom }}>
-          <span className="sr-only">Loading the 3D view.</span>
+          {skin === "sketch" ? (
+            <span className="sketch-travel-note">Loading the 3D city…</span>
+          ) : (
+            <span className="sr-only">Loading the 3D view.</span>
+          )}
           <Key className="overland-jump-status-key" label="Cancel" onClick={() => dispatch({ type: "cancelRequested" })}>
-            <PixelLabel scale={2} text="Cancel" />
+            <SkinLabel skin={skin} text="Cancel" />
           </Key>
         </div>
       ) : null}
       {phase === "holding" && !town ? (
-        <StatusBox message="Loading the 3D view." testId="overland-jump-status" viewport={viewport}>
+        <StatusBox message="Loading the 3D view." skin={skin} testId="overland-jump-status" viewport={viewport}>
           <Key className="overland-jump-status-key" label="Cancel" onClick={() => dispatch({ type: "cancelRequested" })} ref={focusOnMount}>
-            <PixelLabel scale={2} text="Cancel" />
+            <SkinLabel skin={skin} text="Cancel" />
           </Key>
         </StatusBox>
       ) : null}
       {state.phase === "fallback" ? (
-        <StatusBox message={fallbackMessage} testId="overland-jump-fallback" viewport={viewport}>
+        <StatusBox message={fallbackMessage} skin={skin} testId="overland-jump-fallback" viewport={viewport}>
           <Key className="overland-jump-status-key" label="Back" onClick={leave} ref={focusOnMount}>
-            <PixelLabel scale={2} text="Back" />
+            <SkinLabel skin={skin} text="Back" />
           </Key>
         </StatusBox>
       ) : null}

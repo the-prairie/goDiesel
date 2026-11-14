@@ -62,6 +62,11 @@ describe("product router", () => {
     expect(surfaceOf(await settledAt(`/lab/overland/town/kyoto-japan/${slug}/3d`))).toBe("lab");
   });
 
+  it("opens the sketch world and a route's 3D world from it as labs", async () => {
+    expect(surfaceOf(await settledAt("/lab/sketch"))).toBe("lab");
+    expect(surfaceOf(await settledAt(`/lab/sketch/${slug}/3d`))).toBe("lab");
+  });
+
   it("names the surface of every view it can open", () => {
     const views = productRouteTree[0]?.children?.[0]?.children ?? [];
     const unnamed = views
