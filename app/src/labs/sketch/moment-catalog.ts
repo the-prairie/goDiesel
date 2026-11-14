@@ -27,6 +27,8 @@ export interface Placement {
   at: { lng: number; lat: number };
   /** Which way the front faces, degrees clockwise from north. */
   facingDeg: number;
+  /** How wide the front is, in metres, when known (from the footprint it snapped to). */
+  frontM?: number;
 }
 
 export interface MomentsData {
@@ -60,6 +62,7 @@ export const swapPlacement = (data: MomentsData, placementId: string, entryId: s
   placements: data.placements.map((p) => (p.id === placementId ? { ...p, entryId } : p)),
 });
 export const emptyPlacement = (data: MomentsData, placementId: string) => swapPlacement(data, placementId, null);
+export const removePlacement = (data: MomentsData, placementId: string): MomentsData => ({ ...data, placements: data.placements.filter((p) => p.id !== placementId) });
 export const unplaceEntry = (data: MomentsData, entryId: string): MomentsData => ({ ...data, placements: data.placements.filter((p) => p.entryId !== entryId) });
 
 /** Standing in the street a few metres out from the front, looking at it, low and close. */

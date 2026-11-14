@@ -1238,6 +1238,30 @@
       "identity": "a load id minted per attempt; firstViewDrawn, timedOut, failed and fadeFinished must name the current load"
     },
     {
+      "id": "moment-assign",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Placing and swapping her planted moments in the sketch world's review mode: the loopback writer is checked first (without it a tap says placing works on the laptop); a tapped building offers the catalog on its street-facing side or the side she turns to; a tapped placed moment can be swapped or removed; a save shows at once and keeps what she had if the writer refuses.",
+      "module": "app/src/labs/sketch/moment-assign-state.ts",
+      "transition": "reduceAssign",
+      "test": [
+        "app/src/labs/sketch/moment-assign-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/sketch/moment-review.tsx"
+      ],
+      "states": [
+        "checking",
+        "ready",
+        "blocked",
+        "placing",
+        "editing",
+        "saving",
+        "failed"
+      ],
+      "identity": "one review session per page; a save carries the document from before it, restored on failure"
+    },
+    {
       "id": "sketch-moment",
       "kind": "reducer",
       "area": "react-app",

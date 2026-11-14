@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import "@/labs/sketch/moment-tv-wall.css";
 import type { CatalogEntry } from "@/labs/sketch/moment-catalog";
+import { handoverTransform, type ScreenFront } from "@/labs/sketch/moment-handover";
 import type { MomentMedia } from "@/labs/sketch/sketch-moment-state";
 
 // A planted moment of the "tv-wall" kind: a shop front drawn in ink, its
@@ -49,6 +50,8 @@ export interface MomentSceneProps {
   media: MomentMedia;
   sound: boolean;
   reducedMotion: boolean;
+  /** Where the real shop front stands on screen as the camera arrives; the drawing starts there. */
+  from?: ScreenFront | null;
   onBack: () => void;
   onSound: () => void;
   onPlay: () => void;
@@ -56,7 +59,7 @@ export interface MomentSceneProps {
   onFailed: () => void;
 }
 
-export default function MomentTvWall({ entry, media, sound, reducedMotion, onBack, onSound, onPlay, onReady, onFailed }: MomentSceneProps) {
+export default function MomentTvWall({ entry, media, sound, reducedMotion, from, onBack, onSound, onPlay, onReady, onFailed }: MomentSceneProps) {
   const art = useMemo(drawing, []);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
   const spill = useRef<HTMLDivElement>(null);
@@ -64,13 +67,20 @@ export default function MomentTvWall({ entry, media, sound, reducedMotion, onBac
   const video = useRef<HTMLVideoElement | null>(null);
   const [inside, setInside] = useState(reducedMotion);
 
-  // Push in to the window, a beat after the street appears (a cut with reduced motion).
+  // The drawing starts lined up with the real front (when it is on screen),
+  // holds while the street fades in over the map, then pushes in to the
+  // window. Reduced motion cuts straight to the window.
+  const [start] = useState(() => (from && !reducedMotion ? handoverTransform(from, { width: window.innerWidth, height: window.innerHeight }) : null));
   useEffect(() => {
     backRef.current?.focus({ preventScroll: true });
     if (reducedMotion) return;
+    if (start) {
+      const timer = window.setTimeout(() => setInside(true), 380);
+      return () => window.clearTimeout(timer);
+    }
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => setInside(true)));
     return () => cancelAnimationFrame(frame);
-  }, [reducedMotion]);
+  }, [reducedMotion, start]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -218,8 +228,8 @@ export default function MomentTvWall({ entry, media, sound, reducedMotion, onBac
   }, [media, reducedMotion]);
 
   return (
-    <div aria-label={entry.title} aria-modal="true" className="moment-tv" data-inside={inside} data-media={media} data-testid="moment-scene" role="dialog">
-      <div className="moment-tv-world">
+    <div aria-label={entry.title} aria-modal="true" className="moment-tv" data-aligning={start && !inside ? "true" : undefined} data-inside={inside} data-media={media} data-testid="moment-scene" role="dialog">
+      <div className="moment-tv-world" data-align={start && !inside ? "aligned" : undefined} style={start && !inside ? { transform: `translate(-50%, -50%) translate(${start.tx}px, ${start.ty}px) scale(${start.s})`, transition: "none" } : undefined}>
         <svg aria-hidden="true" dangerouslySetInnerHTML={{ __html: art }} viewBox="0 0 360 640" />
         {SETS.map(([x, y, w, h], i) => (
           <canvas

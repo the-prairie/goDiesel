@@ -1,0 +1,102 @@
+.moment-review-status {
+  position: fixed;
+  /* Below the look and colour controls, and never in the way of a tap. */
+  top: calc(164px + env(safe-area-inset-top));
+  pointer-events: none;
+  left: 50%;
+  z-index: 15;
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 99px;
+  background: #1b1a17;
+  color: #f6f5ef;
+  font: 600 13px ui-sans-serif, system-ui, -apple-system, sans-serif;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.moment-review-status:empty {
+  display: none;
+}
+
+.moment-review-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 16;
+  box-sizing: border-box;
+  max-height: 60dvh;
+  overflow: auto;
+  padding: 16px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  border-radius: 18px 18px 0 0;
+  background: #f6f5ef;
+  box-shadow: 0 -6px 24px rgba(16, 22, 24, 0.22);
+  color: #1b1a17;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+.moment-review-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.moment-review-note {
+  margin: 0 0 12px;
+  color: #62655f;
+  font-size: 14px;
+}
+
+.moment-review-list {
+  display: flex;
+  margin: 0 0 12px;
+  padding: 0;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+}
+
+.moment-review-row {
+  display: flex;
+  gap: 8px;
+}
+
+.moment-review-button {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid #1b1a17;
+  border-radius: 12px;
+  background: #fff;
+  color: #1b1a17;
+  font: 600 15px ui-sans-serif, system-ui, -apple-system, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.moment-review-row .moment-review-button {
+  text-align: center;
+}
+
+.moment-review-danger {
+  border-color: #b3261e;
+  color: #b3261e;
+}
+
+.moment-review-button:focus {
+  outline: none;
+}
+
+.moment-review-button:focus-visible {
+  outline: 3px solid #0a84ff;
+  outline-offset: 2px;
+}
+
+.moment-review-ghost {
+  width: 30px;
+  height: 30px;
+  border: 2px dashed #0a84ff;
+  border-radius: 6px;
+  background: rgba(10, 132, 255, 0.15);
+}

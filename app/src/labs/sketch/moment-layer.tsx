@@ -4,6 +4,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import maplibregl from "@/providers/maplibre";
 import { plantMoments } from "@/labs/sketch/sketch-moment-markers";
 import { initialMomentState, reduceMoment, type MomentCamera } from "@/labs/sketch/sketch-moment-state";
+import { frontCorners, type ScreenFront } from "@/labs/sketch/moment-handover";
 import { EXAMPLE_MOMENTS, approachCamera, chooseMoments, momentDataSaving, shownMoments, type CatalogEntry, type Placement } from "@/labs/sketch/moment-catalog";
 
 // Planted moments in the drawn world: loaded once the map is up, in its own
@@ -13,15 +14,18 @@ import { EXAMPLE_MOMENTS, approachCamera, chooseMoments, momentDataSaving, shown
 // puts the camera back where she was and focus back on the button.
 
 const SCENES = { "tv-wall": lazy(() => import("@/labs/sketch/moment-tv-wall")) };
+const Review = lazy(() => import("@/labs/sketch/moment-review"));
 
 export interface MomentLayerProps {
   map: MapLibreMap;
   move: (camera: MomentCamera, duration?: number) => Promise<void>;
   reducedMotion: boolean;
+  /** Review mode (?review=1): placing and swapping instead of opening. */
+  review?: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export default function MomentLayer({ map, move, reducedMotion, onOpenChange }: MomentLayerProps) {
+export default function MomentLayer({ map, move, reducedMotion, review, onOpenChange }: MomentLayerProps) {
   const [moments, setMoments] = useState(EXAMPLE_MOMENTS);
   useEffect(() => {
     fetch("/moments/moments.json", { cache: "no-store" })
@@ -31,9 +35,12 @@ export default function MomentLayer({ map, move, reducedMotion, onOpenChange }: 
   }, []);
   const [moment, send] = useReducer(reduceMoment, undefined, initialMomentState);
   const opener = useRef<{ placement: Placement; entry: CatalogEntry; button: HTMLElement } | null>(null);
+  const handover = useRef<ScreenFront | null>(null);
+  const placementTap = useRef<((placement: Placement) => void) | null>(null);
   useEffect(
     () =>
       plantMoments(map, maplibregl, shownMoments(moments), (placement, entry, button) => {
+        if (placementTap.current) return placementTap.current(placement);
         opener.current = { placement, entry, button };
         const center = map.getCenter();
         send({ type: "tapped", id: placement.id, from: { center: [center.lng, center.lat], zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() }, saveData: momentDataSaving(), clip: Boolean(entry.clip) });
@@ -42,7 +49,15 @@ export default function MomentLayer({ map, move, reducedMotion, onOpenChange }: 
   );
   useEffect(() => {
     onOpenChange(moment.phase !== "closed");
-    if (moment.phase === "approaching" && opener.current) void move(approachCamera(opener.current.placement), 2200).then(() => send({ type: "arrived" }));
+    if (moment.phase === "approaching" && opener.current) {
+      const placement = opener.current.placement;
+      void move(approachCamera(placement), 2200).then(() => {
+        // Where her building's front stands now, for the scene to start on.
+        const [a, b] = frontCorners(placement).map((c) => map.project([c.lng, c.lat]));
+        handover.current = { left: Math.min(a.x, b.x), right: Math.max(a.x, b.x), ground: (a.y + b.y) / 2 };
+        send({ type: "arrived" });
+      });
+    }
     if (moment.phase === "leaving") {
       map.jumpTo(moment.from);
       send({ type: "left" });
@@ -59,11 +74,17 @@ export default function MomentLayer({ map, move, reducedMotion, onOpenChange }: 
   const play = useCallback(() => send({ type: "playRequested" }), []);
   const ready = useCallback(() => send({ type: "mediaReady" }), []);
   const failed = useCallback(() => send({ type: "mediaFailed" }), []);
-  if (moment.phase !== "open" || !opener.current) return null;
+  const reviewing = review ? (
+    <Suspense fallback={null}>
+      <Review data={moments} map={map} placementTap={placementTap} setData={setMoments} />
+    </Suspense>
+  ) : null;
+  if (moment.phase !== "open" || !opener.current) return reviewing;
   const Scene = SCENES[opener.current.entry.kind];
   return (
     <Suspense fallback={null}>
-      <Scene entry={opener.current.entry} media={moment.media} onBack={back} onFailed={failed} onPlay={play} onReady={ready} onSound={sound} reducedMotion={reducedMotion} sound={moment.sound} />
+      {reviewing}
+      <Scene entry={opener.current.entry} from={reducedMotion ? null : handover.current} media={moment.media} onBack={back} onFailed={failed} onPlay={play} onReady={ready} onSound={sound} reducedMotion={reducedMotion} sound={moment.sound} />
     </Suspense>
   );
 }

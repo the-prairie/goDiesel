@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EXAMPLE_MOMENTS, approachCamera, chooseMoments, emptyPlacement, placementsOf, placeMoment, shownMoments, swapPlacement, unplaceEntry, type MomentsData } from "@/labs/sketch/moment-catalog";
+import { EXAMPLE_MOMENTS, approachCamera, chooseMoments, emptyPlacement, placementsOf, placeMoment, removePlacement, shownMoments, swapPlacement, unplaceEntry, type MomentsData } from "@/labs/sketch/moment-catalog";
 
 const data: MomentsData = {
   catalog: [
@@ -34,6 +34,11 @@ describe("catalog and placements", () => {
     const emptied = emptyPlacement(data, "p1");
     expect(emptied.placements[0].entryId).toBeNull();
     expect(shownMoments(emptied)).toEqual([]);
+  });
+
+  it("removes one place altogether", () => {
+    expect(removePlacement(data, "p1").placements).toEqual([]);
+    expect(removePlacement(data, "nowhere")).toEqual(data);
   });
 
   it("unplaces an entry from everywhere it stands, leaving the catalog alone", () => {

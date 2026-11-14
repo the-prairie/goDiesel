@@ -51,3 +51,46 @@ rebuild fails.
 - `app/e2e/live-pipeline.spec.ts` (writer security assertions)
 - `README.md`: "The deployed Admin is read-only because the loopback writer is
   not available there."
+
+## Amendment (2026-11-14): her planted moments
+
+The writer's scope widens from curation to one more kind of owner content: the
+sketch world's planted moments. These are her catalog (what she has made, each
+a scene kind and a clip) and her placements (where each stands on a building).
+
+Why here rather than a new write path:
+- It is owner content, and it is private by default. Titles and captions may
+  be private jokes, and entries name clips of other people. So it cannot be
+  committed or built from `quests.json`.
+- It lives outside the generated projections: in the gitignored
+  `app/public/moments/moments.json`, next to her clips. `make-dist.sh` ships
+  only the entries she flags public, with their placements and clips
+  (`app/scripts/moments-dist.mjs`).
+- It needs the same protections curation has: one owner, one machine, and no
+  deployed mutation surface.
+
+What the writer does for it:
+- `GET /api/admin/moments` returns her file, or `null` when there is none.
+- `PUT /api/admin/moments` replaces it.
+- Both sit behind the same origin check. The PUT also takes the same size cap
+  and the same non-blocking owner mutation lock (409 when busy).
+- `admin_moments.py` validates the whole document against a closed contract:
+  - entries with known kinds;
+  - clips only in `/moments/`;
+  - placements naming existing entries or none;
+  - coordinates, facing and front width in range;
+  - no unknown fields.
+- It writes the file atomically: a temporary file in the same folder, then
+  `os.replace`. A refused or failed save leaves the file as it was.
+- There is no rebuild: the file is read by the app at runtime.
+
+Consequences:
+- Still loopback-only. Her phone on the LAN can view the sketch world but
+  cannot place moments; the review mode says "Placing moments works on the
+  laptop" instead of failing silently.
+- The live pipeline gate asserts the same refusals for the moments endpoint
+  (403 cross-origin, 413 oversize, 400 malformed or inconsistent) and a valid
+  write and read-back in its isolated workspace.
+
+Evidence: `admin.py`, `admin_moments.py`, `test_admin_moments.py`,
+`app/e2e/live-pipeline.spec.ts`.

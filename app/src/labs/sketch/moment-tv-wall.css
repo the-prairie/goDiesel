@@ -9,6 +9,13 @@
   color: #1b1a17;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   animation: moment-tv-in 360ms ease-out both;
+  transition: background-color 700ms ease-out;
+}
+
+/* The hand-over: the drawn street stands on the map over her building's
+   front, the map still around it; the paper floods in as it pushes in. */
+.moment-tv[data-aligning="true"] {
+  background-color: transparent;
 }
 
 .moment-tv-world {

@@ -596,7 +596,9 @@
    and moving in the ink city. CSS only, so nothing runs per frame. */
 
 .sketch-moment {
-  position: relative;
+  /* Absolute as MapLibre's marker class is: in normal flow, every marker
+     after the first would be pushed along by the ones before it. */
+  position: absolute;
   width: 44px;
   height: 44px;
   padding: 0;

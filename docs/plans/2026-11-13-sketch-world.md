@@ -842,7 +842,7 @@ Bundles:
   - The caption shows only when the entry has one.
 - *Her catalog view* (`#/lab/moments`): each entry with a silent preview,
   where it stands or "Not placed", and places that show nothing.
-- *Not built: assigning and swapping in review mode.* It needs her private
+- *Not built in this round (built in round 13, S32): assigning and swapping in review mode.* It needs her private
   file written from the browser. The proposal:
   - Extend the owner writer of ADR-0010 (loopback `127.0.0.1:8766`), not a
     new path, with `GET`/`PUT /api/admin/moments`.
@@ -867,3 +867,65 @@ Bundles:
   7.1 KiB);
 - catalog page: 2.4 of 6 KiB;
 - initial shell: +0.3 KiB, for the new lab route.
+
+## Round 13: placing moments from the map, and the hand-over
+
+**S32. She places, swaps and removes moments in review mode; the drawn shop
+starts on her building.**
+- *The writer* (ADR-0010, amended): `GET`/`PUT /api/admin/moments` on the
+  loopback owner writer.
+  - The same origin check, 1 MiB cap and mutation lock (busy gives 409).
+  - The whole moments contract is validated (`admin_moments.py`), then the
+    file is replaced atomically (a temp file in the same folder, fsync,
+    rename). A refused write leaves her file as it was. No rebuild.
+- *Review mode* (`?review=1`, the `moment-assign` lifecycle, its own lazy
+  chunk):
+  - Tapping a building finds the footprint under the tap and its street
+    fronts (`moment-place.ts`). Each edge of 3 m or more is ranked by
+    distance to the tile's roads from a point 4 m out, so the front faces
+    the nearest street. A ghost shows it; "Turn to another side" steps
+    through the others.
+  - Choosing an entry places it on that front, at its middle, with its
+    facing and width.
+  - Tapping a placed moment offers "Swap to …" for each other entry, and
+    "Remove from here".
+  - The change shows at once and is saved through the writer. If the save
+    is refused or fails, what she had comes back, with "Not saved. Nothing
+    was changed." and the writer's reason.
+  - Away from the laptop (the writer does not answer), the status says
+    "Viewing only: placing works on the laptop.", and a tap on a building
+    says "Placing moments works on the laptop." The writer stays
+    loopback-only.
+  - The catalog page has no place or remove buttons; the map is the way.
+- *The hand-over* (`moment-handover.ts`): as the camera arrives, the
+  front's two ground corners (its width, 20 m if unknown) are projected to
+  the screen.
+  - The scene's first frame scales and moves the drawing so its shop front
+    (x 60 to 300 on the 360 by 640 drawing, ground at 520) covers them,
+    within 2 px in the e2e. The scene is see-through for that beat, so the
+    drawn street stands in the map over her building. It then pushes in to
+    the window while the paper floods in.
+  - It falls back to the old push-in when the front is off screen or under
+    24 px wide. Reduced motion cuts straight to the window.
+- *Fixed on the way*: every marker after the first was pushed sideways by
+  the ones before it (`.sketch-moment` was `position: relative`, which beat
+  MapLibre's marker class in dev's stylesheet order). It is now absolute,
+  and an e2e test places three moments, each on its spot.
+
+Landing after round 13 (all drawn by landing on every first jump, as in round
+8):
+
+| | Run 1 | Run 2 |
+|---|---|---|
+| Chromium, production | 2.88 s | 2.88 s |
+| Safari (simulator), production | 2.99 s | 2.95 s |
+| Chromium, 8790 | 2.93 s | 2.89 s |
+| Safari (simulator), 8790 | 2.97 s | 3.09 s |
+
+Bundles:
+- sketch world: 86.3 of 87 KiB;
+- planted moments: 13.2 of 14 KiB (budget raised from 12 for the
+  hand-over; model 1.0, hand-over 0.6, layer 4.1, tv-wall scene 7.5 KiB);
+- review mode: 7.6 of 10 KiB, its own budget, since only `?review=1`
+  loads it;
+- catalog page: 2.4 of 6 KiB.

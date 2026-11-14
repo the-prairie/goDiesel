@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { buildingCentre, oneBuildingTile } from "./helpers/one-building-tile";
+
 // Planted moments in the sketch world, on the committed example only: her
 // private moments folder is never used here (requests for it are refused or
 // answered with a test catalog). The clip, where one is needed, is a few
@@ -82,6 +84,33 @@ test("a planted moment stands on its building in the world, a named button, seen
   await expect(page.getByTestId("moment-scene")).toHaveCount(0);
 });
 
+test("several planted moments each stand on their own spot", async ({ page }) => {
+  const places = [
+    { id: "one", at: { lng: 135.769891, lat: 34.995784 } },
+    { id: "two", at: { lng: 135.7699, lat: 34.9967 } },
+    { id: "three", at: { lng: 135.7685, lat: 34.9962 } },
+  ];
+  await page.route(/\/moments\//, (route) =>
+    route.request().url().endsWith("/moments/moments.json")
+      ? route.fulfill({ json: { catalog: [{ id: "e", kind: "tv-wall", title: "E", clip: null }], placements: places.map((p) => ({ ...p, entryId: "e", facingDeg: 185 })) } })
+      : route.fulfill({ status: 404, body: "" }),
+  );
+  await openWorld(page);
+  await page.evaluate(() => (window as unknown as { __sketch: { map: { jumpTo(o: object): void } } }).__sketch.map.jumpTo({ center: [135.7694, 34.9962], zoom: 16.5, pitch: 0, bearing: 0 }));
+  await expect(page.locator(".sketch-moment")).toHaveCount(3);
+  for (const place of places) {
+    const where = await page.evaluate((at) => {
+      const map = (window as unknown as { __sketch: { map: { project(p: [number, number]): { x: number; y: number } } } }).__sketch.map;
+      const box = document.querySelector("[data-testid=sketch-map]")!.getBoundingClientRect();
+      const p = map.project([at.lng, at.lat]);
+      return { x: box.left + p.x, y: box.top + p.y };
+    }, place.at);
+    const r = (await page.locator(`.sketch-moment[data-moment-id="${place.id}"]`).boundingBox())!;
+    expect(Math.abs(r.x + r.width / 2 - where.x)).toBeLessThan(1.5);
+    expect(Math.abs(r.y + r.height - where.y)).toBeLessThan(1.5);
+  }
+});
+
 test("opening it takes the camera to the shop front, then the window: nine sets, muted, Sound on and off; Back returns her and focus", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("about:blank");
@@ -156,6 +185,41 @@ test("with reduced motion the camera and the push-in cut", async ({ page }) => {
   const scene = page.getByRole("dialog", { name: "No signal (example)" });
   await expect(scene).toBeVisible({ timeout: 2_000 });
   await expect(scene).toHaveAttribute("data-inside", "true");
+  await expect(page.locator("[data-align]")).toHaveCount(0);
+});
+
+test("the drawn shop starts where her building's front stands, then pushes in", async ({ page }) => {
+  test.setTimeout(60_000);
+  await noPrivateMoments(page);
+  await openWorld(page);
+  // Note the drawing's first frame the moment it appears, lined up.
+  await page.evaluate(() => {
+    const w = window as unknown as { __aligned?: object };
+    new MutationObserver(() => {
+      const world = document.querySelector<HTMLElement>('[data-align="aligned"]');
+      if (!world || w.__aligned) return;
+      const r = world.getBoundingClientRect();
+      w.__aligned = { left: r.left + (r.width * 60) / 360, right: r.left + (r.width * 300) / 360, ground: r.top + (r.height * 520) / 640 };
+    }).observe(document.body, { subtree: true, childList: true, attributes: true });
+  });
+  await page.getByRole("button", { name: EXAMPLE_NAME }).click();
+  const scene = page.getByRole("dialog", { name: "No signal (example)" });
+  await expect(scene).toHaveAttribute("data-inside", "true", { timeout: 15_000 });
+  const drawn = (await page.evaluate(() => (window as unknown as { __aligned?: { left: number; right: number; ground: number } }).__aligned))!;
+  expect(drawn).toBeTruthy();
+  // The real front at the approach camera: 20 m wide, facing 185°, at the example's spot.
+  const real = await page.evaluate(() => {
+    const map = (window as unknown as { __sketch: { map: { project(p: [number, number]): { x: number; y: number } } } }).__sketch.map;
+    const box = document.querySelector("[data-testid=sketch-map]")!.getBoundingClientRect();
+    const along = ((185 + 90) * Math.PI) / 180;
+    const lat = 34.995784;
+    const dLng = (Math.sin(along) * 10) / (111320 * Math.cos((lat * Math.PI) / 180));
+    const dLat = (Math.cos(along) * 10) / 110540;
+    const a = map.project([135.769891 - dLng, lat - dLat]);
+    const b = map.project([135.769891 + dLng, lat + dLat]);
+    return { left: box.left + Math.min(a.x, b.x), right: box.left + Math.max(a.x, b.x), ground: box.top + (a.y + b.y) / 2 };
+  });
+  for (const key of ["left", "right", "ground"] as const) expect(Math.abs(drawn[key] - real[key])).toBeLessThan(2);
 });
 
 test("her catalog lists each moment with a preview and where it stands", async ({ page }) => {
@@ -169,4 +233,113 @@ test("her catalog lists each moment with a preview and where it stands", async (
   await expect(entry).toContainText("No signal (example)");
   await expect(entry).toContainText("No signal");
   await expect(entry).toContainText(/Placed at 34\.99578, 135\.76989, facing S/);
+});
+
+// ---------------------------------------------------------------- review mode
+// The writer (ADR-0010) stood in at its loopback address; one building to tap.
+
+const WRITER = "http://127.0.0.1:8766";
+const EXAMPLE = {
+  catalog: [
+    { id: "no-signal", kind: "tv-wall", title: "No signal (example)", clip: null },
+    { id: "second", kind: "tv-wall", title: "Second (test)", clip: null },
+  ],
+  placements: [{ id: "route-064-shop", entryId: "no-signal", at: { lng: 135.769891, lat: 34.995784 }, facingDeg: 185 }],
+};
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, PUT, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
+
+async function fakeWriter(page: Page, { available = true, refuse = false } = {}) {
+  const puts: unknown[] = [];
+  await page.route(`${WRITER}/**`, async (route) => {
+    if (!available) return route.abort();
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    if (request.url().endsWith("/api/admin/status")) return route.fulfill({ headers: cors, json: { writer_available: true } });
+    if (request.method() === "PUT") {
+      puts.push(request.postDataJSON());
+      return refuse ? route.fulfill({ status: 400, headers: cors, json: { error: "a placement names an entry that is not in the catalog" } }) : route.fulfill({ headers: cors, json: { ok: true } });
+    }
+    return route.fulfill({ headers: cors, json: { moments: EXAMPLE } });
+  });
+  return puts;
+}
+
+async function reviewWorld(page: Page) {
+  const tile = oneBuildingTile();
+  await page.route("https://tiles.openfreemap.org/**", async (route) => {
+    const url = route.request().url();
+    if (url.endsWith("/planet"))
+      return route.fulfill({ json: { tilejson: "3.0.0", tiles: ["https://tiles.openfreemap.org/stub/{z}/{x}/{y}.pbf"], minzoom: 0, maxzoom: 14, vector_layers: ["water", "transportation", "building"].map((id) => ({ id, fields: {} })) } });
+    if (/\/stub\/14\//.test(url)) return route.fulfill({ body: tile, contentType: "application/x-protobuf" });
+    return route.fulfill({ status: 204 });
+  });
+  await noPrivateMoments(page);
+  await page.setViewportSize({ width: 402, height: 874 });
+  await page.goto(`/#/lab/sketch?route=${GOLD}&review=1`);
+  await expect(page.getByTestId("sketch-world")).toHaveAttribute("data-map-phase", "ready");
+  // Look straight down at the test building in the tile beside her first placement.
+  const centre = buildingCentre(14370, 6490);
+  await page.evaluate((c) => (window as unknown as { __sketch: { map: { jumpTo(o: object): void } } }).__sketch.map.jumpTo({ center: [c.lng, c.lat], zoom: 17.6, pitch: 0, bearing: 0 }), centre);
+  await page.waitForFunction(() => (window as unknown as { __sketch: { map: { loaded(): boolean } } }).__sketch.map.loaded());
+  await page.waitForTimeout(600);
+  const point = await page.evaluate((c) => (window as unknown as { __sketch: { map: { project(p: [number, number]): { x: number; y: number } } } }).__sketch.map.project([c.lng, c.lat]), centre);
+  const box = (await page.getByTestId("sketch-map").boundingBox())!;
+  return { x: box.x + point.x, y: box.y + point.y };
+}
+
+test("in review mode away from the laptop, a tap on a building says placing works on the laptop", async ({ page }) => {
+  test.setTimeout(60_000);
+  await fakeWriter(page, { available: false });
+  const building = await reviewWorld(page);
+  await expect(page.getByTestId("moment-review")).toHaveText("Viewing only: placing works on the laptop.");
+  await page.mouse.click(building.x, building.y);
+  await expect(page.getByRole("dialog", { name: "Place a moment" })).toContainText("Placing moments works on the laptop.");
+});
+
+test("in review mode, tapping a building places a catalog entry on its street-facing side, saved through the writer", async ({ page }) => {
+  test.setTimeout(60_000);
+  const puts = await fakeWriter(page);
+  const building = await reviewWorld(page);
+  await expect(page.getByTestId("moment-review")).toHaveText("Tap a building to place a moment.");
+  await page.mouse.click(building.x, building.y);
+  const sheet = page.getByRole("dialog", { name: "Place a moment" });
+  await sheet.getByRole("button", { name: "Second (test)" }).click();
+  await expect(page.getByRole("button", { name: "Second (test), a planted moment" })).toHaveCount(1);
+  await expect.poll(() => puts.length).toBe(1);
+  const saved = puts[0] as typeof EXAMPLE & { placements: { entryId: string; facingDeg: number }[] };
+  const placed = saved.placements.at(-1)!;
+  expect(placed.entryId).toBe("second");
+  // The street runs along its south side.
+  expect(Math.round(placed.facingDeg)).toBe(180);
+  await expect(page.getByTestId("moment-review")).toHaveAttribute("data-phase", "ready");
+});
+
+test("in review mode, tapping a placed moment swaps it or removes it", async ({ page }) => {
+  test.setTimeout(60_000);
+  const puts = await fakeWriter(page);
+  await reviewWorld(page);
+  await page.evaluate(() => (window as unknown as { __sketch: { map: { jumpTo(o: object): void } } }).__sketch.map.jumpTo({ center: [135.769891, 34.995784], zoom: 16, pitch: 0 }));
+  await page.getByRole("button", { name: "No signal (example), a planted moment" }).click();
+  const sheet = page.getByRole("dialog", { name: "Place a moment" });
+  await sheet.getByRole("button", { name: "Swap to Second (test)" }).click();
+  await expect(page.getByRole("button", { name: "Second (test), a planted moment" })).toHaveCount(1);
+  await expect.poll(() => puts.length).toBe(1);
+  await page.getByRole("button", { name: "Second (test), a planted moment" }).click();
+  await sheet.getByRole("button", { name: "Remove from here" }).click();
+  await expect(page.locator(".sketch-moment")).toHaveCount(0);
+  await expect.poll(() => puts.length).toBe(2);
+  expect((puts[1] as typeof EXAMPLE).placements).toEqual([]);
+});
+
+test("in review mode, a refused save keeps what she had and says so", async ({ page }) => {
+  test.setTimeout(60_000);
+  await fakeWriter(page, { refuse: true });
+  await reviewWorld(page);
+  await page.evaluate(() => (window as unknown as { __sketch: { map: { jumpTo(o: object): void } } }).__sketch.map.jumpTo({ center: [135.769891, 34.995784], zoom: 16, pitch: 0 }));
+  await page.getByRole("button", { name: "No signal (example), a planted moment" }).click();
+  await page.getByRole("dialog", { name: "Place a moment" }).getByRole("button", { name: "Remove from here" }).click();
+  const sheet = page.getByRole("dialog", { name: "Place a moment" });
+  await expect(sheet).toContainText("Not saved. Nothing was changed.");
+  await expect(sheet).toContainText("a placement names an entry that is not in the catalog");
+  await expect(page.getByRole("button", { name: "No signal (example), a planted moment" })).toHaveCount(1);
 });

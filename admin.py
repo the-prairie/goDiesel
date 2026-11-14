@@ -42,6 +42,7 @@ from admin_geocode import (
     write_json_atomic,
 )
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
+from admin_moments import read_moments, write_moments
 from route_regions import classify_region
 import hashlib
 import tempfile
@@ -649,7 +650,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
         self.end_headers()
 
     def do_GET(self):
@@ -685,6 +686,16 @@ class Handler(BaseHTTPRequestHandler):
             svg = polyline_svg(aid)
             self._send(200, svg or '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
                        'image/svg+xml')
+            return
+        if path == '/api/admin/moments':
+            # Her private moments file, for the sketch world's review mode.
+            if not self._origin_allowed():
+                self._send(403, {'error': 'origin not allowed'})
+                return
+            try:
+                self._send(200, {'moments': read_moments(QUESTS)})
+            except (OSError, ValueError) as error:
+                self._send(500, {'error': f'moments file unreadable: {error}'})
             return
         if path == '/api/classify-status':
             unmapped_now = len(_unmapped_route_ids())
@@ -754,6 +765,42 @@ class Handler(BaseHTTPRequestHandler):
             'had_position': photo.get('lat') is not None,
             'had_time': photo.get('taken_utc') is not None,
         })
+
+    def do_PUT(self):
+        """Replace her moments file: whole, valid, atomic, under the owner lock."""
+        path = urlparse(self.path).path
+        if not self._origin_allowed():
+            self._send(403, {'error': 'origin not allowed'})
+            return
+        if path != '/api/admin/moments':
+            self._send(404, {'error': 'not found'})
+            return
+        try:
+            n = int(self.headers.get('Content-Length', 0))
+        except ValueError:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if n <= 0:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if n > MAX_POST_BYTES:
+            self._send(413, {'error': 'request body too large'})
+            return
+        if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+            self._send(409, _mutation_busy_body())
+            return
+        try:
+            data = json.loads(self.rfile.read(n).decode('utf-8'))
+            write_moments(QUESTS, data)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            self._send(400, {'error': str(error)})
+            return
+        except OSError as error:
+            self._send(500, {'error': f'moments file not written: {error}'})
+            return
+        finally:
+            OWNER_MUTATION_LOCK.release()
+        self._send(200, {'ok': True, 'moments': data})
 
     def do_POST(self):
         path = urlparse(self.path).path

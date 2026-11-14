@@ -104,11 +104,20 @@ if (entry.includes("sketch-edge-worker") || entry.includes("building-edges")) {
 
 // Planted moments (lab): the layer that places them and each kind's scene,
 // loaded only once the map is up and a moment is opened. 10.9 KiB when added
-// (2026-11-14, the tv-wall scene). Her catalog view is its own page chunk.
-const momentChunks = assets.filter((name) => /^moment-.*\.js$/.test(name));
+// (2026-11-14, the tv-wall scene); 13.2 KiB with the hand-over that lines the
+// drawn shop up with her building (round 13), budget 12 → 14 KiB. Her catalog
+// view is its own page chunk.
+const momentChunks = assets.filter((name) => /^moment-.*\.js$/.test(name) && !name.startsWith("moment-review-"));
 let momentBytes = 0;
 for (const name of momentChunks) momentBytes += (await stat(path.join(dist, "assets", name))).size;
-if (momentBytes > 12 * 1024) throw new Error(`Planted moments are ${(momentBytes / 1024).toFixed(1)} KiB; budget is 12 KiB.`);
+if (momentBytes > 14 * 1024) throw new Error(`Planted moments are ${(momentBytes / 1024).toFixed(1)} KiB; budget is 14 KiB.`);
+// Her review mode (placing and swapping, ?review=1 only): never loaded for a
+// visitor, so it is kept out of the planted-moments budget. 7.6 KiB when added
+// (2026-11-14).
+const reviewChunks = assets.filter((name) => /^moment-review-.*\.js$/.test(name));
+let reviewBytes = 0;
+for (const name of reviewChunks) reviewBytes += (await stat(path.join(dist, "assets", name))).size;
+if (reviewBytes > 10 * 1024) throw new Error(`Moment review mode is ${(reviewBytes / 1024).toFixed(1)} KiB; budget is 10 KiB.`);
 const catalogChunks = assets.filter((name) => /^moments-catalog-page-.*\.js$/.test(name));
 let catalogBytes = 0;
 for (const name of catalogChunks) catalogBytes += (await stat(path.join(dist, "assets", name))).size;

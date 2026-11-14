@@ -610,7 +610,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
 
       {mapUp && mapRef.current ? (
         <Suspense fallback={null}>
-          <MomentLayer map={mapRef.current} move={move} onOpenChange={setMomentOpen} reducedMotion={reducedMotion} />
+          <MomentLayer map={mapRef.current} move={move} onOpenChange={setMomentOpen} reducedMotion={reducedMotion} review={options.review} />
         </Suspense>
       ) : null}
       {realmEntry && jumpMap && rootElement ? (
