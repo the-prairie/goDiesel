@@ -312,8 +312,9 @@ export function createEdgeLayer({
     return tilesToDraw({ camera, center: middle, maxTiles });
   };
 
-  const request = () => {
-    for (const { x, y } of want()) {
+  const request = (wanted: { x: number; y: number }[] = want()) => {
+    if (!worker) return;
+    for (const { x, y } of wanted) {
       const key = tileKey(x, y);
       if (failed.has(key) || pending.get(key) === version) continue;
       if (tiles.get(key)?.version === version || arrived.some((item) => item.key === key && item.version === version)) continue;
@@ -457,7 +458,15 @@ export function createEdgeLayer({
 
   const onMove = () => request();
 
-  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; stats(): EdgeStats } = {
+  /** Starts on the tiles round a place the camera is about to reach (the jump's dive). */
+  const prefetch = (lng: number, lat: number) => {
+    const n = 2 ** TILE_ZOOM;
+    const sin = Math.sin((lat * Math.PI) / 180);
+    const point: [number, number] = [((lng + 180) / 360) * n, (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * n];
+    request(tilesToDraw({ camera: point, center: point, maxTiles }));
+  };
+
+  const layer: CustomLayerInterface & { setLook(look: SketchLook): void; setReveal(next: Reveal | null): void; setRoutes(lines: [number, number][][]): void; setPaused(next: boolean): void; prefetch(lng: number, lat: number): void; stats(): EdgeStats } = {
     id: "building-edges",
     type: "custom",
     renderingMode: "3d",
@@ -595,6 +604,7 @@ export function createEdgeLayer({
       stroke = STROKE[next];
       map?.triggerRepaint();
     },
+    prefetch,
     setPaused(next: boolean) {
       paused = next;
       map?.triggerRepaint();

@@ -455,3 +455,19 @@
   color: #1d1d1f;
   image-rendering: auto;
 }
+
+/* While Google's city loads after the dive: the drawing stays, with a plain word. */
+.overland-jump-status-layer[data-skin="sketch"] .overland-jump-travel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sketch-travel-note {
+  padding: 8px 12px;
+  border: 1.5px solid #1d1d1f;
+  background: #fbfbf8;
+  color: #1d1d1f;
+  font: 500 14px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 2px 2px 0 rgba(29, 29, 31, 0.18);
+}

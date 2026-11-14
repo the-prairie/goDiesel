@@ -304,7 +304,9 @@ sketch skin draws:
 Same elements and behaviour as Overland's pixel versions, which stay
 unchanged for Overland.
 
-**S17. The join: one continuous world.** Decided and recorded. Not built
+**S17. The join: one continuous world.** *Superseded for the browse flow by
+S22 (round 5): the zoom hand-over below is built and kept behind the lab
+switch `real=1`, off by default.* Decided and recorded. Not built
 this round.
 
 1. *World and region (zoom below about 14.5).* Always the OpenStreetMap
@@ -456,3 +458,52 @@ had arrived.
   lines follow Google's photogrammetry mesh: cars and trees become blobs,
   walls wobble, and middle-distance lines are faint. It does not reach the
   drawn city's ruled look. The ceiling is the mesh.
+
+
+## Round 5: the drawn city is the world; the real one appears on the jump
+
+**S22. Decision.** The drawn OpenStreetMap city is the world you browse at
+every zoom. Google's city appears only when you jump onto a route, in its
+own colour, unaltered.
+- *Why:* round 4 showed that Google's city drawn in ink cannot look ruled.
+  Its lines follow the photogrammetry mesh, and its middle distance is
+  faint, so the zoom hand-over read as a drop in quality.
+- The hand-over code, its reducer and its tests are kept behind the lab
+  switch `real=1`. The `sketch-real` spike page is unchanged.
+
+**S23. The jump, drawn to real.** What the viewer sees, and the fixes:
+- *Camera matched at the cut.* The dive now ends where the 3D replay's
+  opening camera will stand: the same centre, heading, tilt and range, read
+  from the functions the replay driver uses, at Google's own field of view,
+  which eases in during the flight.
+  - A dive finished early (when Google is ready first) now lands on that
+    camera instead of stopping mid-air. Before, the cut came at zoom 7,
+    mid-arc.
+  - MapLibre's field-of-view setter fires its own move events. These are
+    marked, so they never end a flight early.
+- *No pop on landing.* The drawn buildings round the landing spot start
+  loading as the dive begins, so they are there when it lands.
+- *The drawing stays until the real city has drawn.* While Google loads, the
+  drawn city stays on screen with a plain "Loading the 3D city…" and Cancel.
+  It crossfades only once Google's scene is ready. A failure shows the
+  jump's plain fallback message with Back, over the drawing, never a blank.
+  Reduced motion cuts.
+- *Coming back.* The camera settles close over the route's start, at
+  MapLibre's own field of view, where the route's corridor shows in colour.
+- *Google's attribution* in the 3D world is Google's own, drawn by its map,
+  uncovered by the controls.
+- *Port 8790.* The jump's loading is Google's Maps JavaScript, never the
+  bundled 3D library, and it has no 8 s limit, so the dev server's slowness
+  cannot decline it. Measured read-only on 8790 at 375: the real city shows
+  11.4 s after Jump in, and the replay runs at 12.2 s.
+
+**Round 5 results.** Time from pressing Jump in to Google's city showing
+(the crossfade starting), dev server 8795:
+
+| | Real city showing | Replay running |
+|---|---|---|
+| 375×812 | 7.5 s | 8.3 s |
+| 1440×900 | 9.7 s | 10.5 s |
+
+The dive itself takes 2.9 s; the rest is Google's map loading behind the
+drawing.

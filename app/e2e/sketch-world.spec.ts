@@ -115,10 +115,36 @@ test("choosing a route and jumping in hands over to the 3D replay; Back returns 
   await expect(page.getByTestId("overland-realm-controls").locator("canvas")).toHaveCount(0);
   // The sketch is out of the way and takes no input while the 3D world is up.
   await expect(page.locator(".sketch-stage")).toHaveAttribute("inert", "");
+  // The cut is matched: the drawn city's camera stands where the replay's opens.
+  const matched = await page.evaluate(() => {
+    const target = (window as unknown as { __sketchJumpCamera: { zoom: number; pitch: number; bearing: number; fovDeg: number } }).__sketchJumpCamera;
+    const map = (window as unknown as { __sketch: { map: { getZoom(): number; getPitch(): number; getBearing(): number; getVerticalFieldOfView(): number } } }).__sketch.map;
+    return { target, at: { zoom: map.getZoom(), pitch: map.getPitch(), bearing: (map.getBearing() + 360) % 360, fovDeg: map.getVerticalFieldOfView() } };
+  });
+  expect(matched.at.zoom).toBeCloseTo(matched.target.zoom, 1);
+  expect(matched.at.pitch).toBeCloseTo(matched.target.pitch, 0);
+  expect(matched.at.bearing).toBeCloseTo((matched.target.bearing + 360) % 360, 0);
+  expect(matched.at.fovDeg).toBeCloseTo(matched.target.fovDeg, 0);
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(jump).toHaveCount(0, { timeout: 30_000 });
   await expect(page).toHaveURL(new RegExp(`#/lab/sketch\\?route=${GOLD.slug}$`));
   await expect(gold).toHaveAttribute("aria-pressed", "true");
+  // Back in the drawing, close over the route's start, where its corridor shows in colour.
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __sketch: { map: { getZoom(): number } } }).__sketch.map.getZoom())).toBeGreaterThan(15.5);
+});
+
+test("while Google's city loads, the drawing stays up with a plain word, and Cancel returns to it", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await installGoogleReplay(page, "loading");
+  await stubTiles(page);
+  await page.goto(`/#/lab/sketch?route=${GOLD.slug}`);
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  await page.getByTestId("sketch-jump").click();
+  await expect(page.locator("[data-jump-phase]")).toHaveAttribute("data-jump-phase", "holding", { timeout: 15_000 });
+  await expect(page.getByTestId("overland-jump-travel")).toContainText("Loading the 3D city");
+  await expect(page.locator(".sketch-stage")).toHaveAttribute("data-cover-opacity", "1");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.locator("[data-jump-phase]")).toHaveCount(0, { timeout: 15_000 });
 });
 
 test("a deep link to a route not in this city is not found", async ({ page }) => {
@@ -196,7 +222,7 @@ test("zooming into Kyoto hands over to the real city with a matched camera, and 
   await page.setViewportSize({ width: 375, height: 812 });
   await fakeRealCity(page);
   await stubTiles(page);
-  await page.goto("/#/lab/sketch");
+  await page.goto("/#/lab/sketch?real=1");
   await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
   await expect(handover(page)).toHaveAttribute("data-handover", "drawn");
   await zoomTo(page, 16.5);
@@ -216,11 +242,22 @@ test("zooming into Kyoto hands over to the real city with a matched camera, and 
   expect(await page.evaluate(() => window.__realLog!)).toMatchObject({ created: 1, destroyed: 1 });
 });
 
+test("browses the drawn city at every zoom: the ink hand-over to the real city is off unless the lab switch asks", async ({ page }) => {
+  await fakeRealCity(page);
+  await stubTiles(page);
+  await page.goto("/#/lab/sketch");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  await zoomTo(page, 16.5);
+  await page.waitForTimeout(800);
+  await expect(handover(page)).toHaveAttribute("data-handover", "drawn");
+  expect(await page.evaluate(() => window.__realLog!.created)).toBe(0);
+});
+
 test("keeps the drawn city, and loads nothing, for a device saving data", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, "connection", { value: { saveData: true }, configurable: true }));
   await fakeRealCity(page);
   await stubTiles(page);
-  await page.goto("/#/lab/sketch");
+  await page.goto("/#/lab/sketch?real=1");
   await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
   await zoomTo(page, 16.5);
   await expect(handover(page)).toHaveAttribute("data-handover", "declined");
@@ -231,7 +268,7 @@ test("keeps the drawn city, and loads nothing, for a device saving data", async 
 test("keeps the drawn city when the real city's first view is too slow, and lets it go", async ({ page }) => {
   await fakeRealCity(page, { firstView: false });
   await stubTiles(page);
-  await page.goto("/#/lab/sketch");
+  await page.goto("/#/lab/sketch?real=1");
   await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
   await zoomTo(page, 16.5);
   await expect(handover(page)).toHaveAttribute("data-handover", "loading");
@@ -245,7 +282,7 @@ test("jumping from the real city floods colour on the same geometry before the 3
   await installGoogleReplay(page, "ready");
   await fakeRealCity(page);
   await stubTiles(page);
-  await page.goto(`/#/lab/sketch?route=${GOLD.slug}`);
+  await page.goto(`/#/lab/sketch?real=1&route=${GOLD.slug}`);
   await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
   await zoomTo(page, 16.5);
   await expect(handover(page)).toHaveAttribute("data-handover", "real", { timeout: 10_000 });
@@ -260,7 +297,7 @@ test("on a phone, Google's two-line credit sits whole above OpenStreetMap's, wit
   await page.setViewportSize({ width: 375, height: 812 });
   await fakeRealCity(page);
   await stubTiles(page);
-  await page.goto("/#/lab/sketch");
+  await page.goto("/#/lab/sketch?real=1");
   await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
   await zoomTo(page, 16.5);
   await expect(handover(page)).toHaveAttribute("data-handover", "real", { timeout: 10_000 });

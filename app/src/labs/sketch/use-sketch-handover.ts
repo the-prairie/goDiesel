@@ -47,6 +47,7 @@ export function useSketchHandover({
   mapRef,
   layerRef,
   mapReady,
+  enabled,
   paused,
   explored,
   reveal,
@@ -57,6 +58,8 @@ export function useSketchHandover({
   /** Where the real city is drawn: over the map, under the page's keys. */
   layerRef: RefObject<HTMLDivElement | null>;
   mapReady: boolean;
+  /** The lab switch (`real=1`): off, the drawn city is the world at every zoom. */
+  enabled: boolean;
   /** While a 3D world is open the camera belongs to the jump: no hand-over then. */
   paused: boolean;
   explored: readonly ExploredRoute[];
@@ -95,7 +98,7 @@ export function useSketchHandover({
   // Watch the camera.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady) return;
+    if (!map || !mapReady || !enabled) return;
     capable.current ??= capabilities();
     const check = () => {
       if (pausedRef.current) return;
@@ -113,7 +116,7 @@ export function useSketchHandover({
       map.off("moveend", check);
       map.off("move", onMove);
     };
-  }, [follow, mapReady, mapRef, send]);
+  }, [enabled, follow, mapReady, mapRef, send]);
 
   // Load the real city.
   const loadId = "loadId" in state ? state.loadId : 0;

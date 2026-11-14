@@ -24,6 +24,11 @@ import { REVEAL_LAYERS } from "@/labs/sketch/sketch-tile";
 import { REVEAL_RADIUS_M, exploredRoutes, type RevealMode } from "@/labs/sketch/sketch-reveal";
 import { sketchStyle } from "@/labs/sketch/sketch-style";
 import { HANDOVER_FADE_MS, useSketchHandover } from "@/labs/sketch/use-sketch-handover";
+import { MAPLIBRE_FOV_DEG } from "@/labs/sketch/sketch-camera-match";
+import { fovAlongFlight, mapCameraForReplay } from "@/labs/sketch/sketch-jump-camera";
+import type { QuestRoute } from "@/domain/route";
+import { googleRouteCameraPose, initialGoogleRouteNavigatorState } from "@/surfaces/replay/playback/route-navigator-controller";
+import { sustainedRouteCamera } from "@/surfaces/replay/scene/route-camera-score";
 import { RouteNotFound } from "@/ui/route-not-found";
 import { useReducedMotion } from "@/ui/use-reduced-motion";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -38,6 +43,12 @@ const lineOf = (slug: string) => EXPLORED.find((route) => route.slug === slug)?.
 
 /** What the tiles are searched for: her routes and how far colour reaches. */
 const revealFor = (mode: RevealMode) => ({ lines: EXPLORED.map((route) => route.line), radiusM: REVEAL_RADIUS_M[mode], fade: mode === "wash" });
+
+/** The pose the 3D replay opens with, read from the same functions its driver uses. */
+function openingPose(route: QuestRoute, viewportWidth: number) {
+  const state = initialGoogleRouteNavigatorState();
+  return sustainedRouteCamera(route, state, googleRouteCameraPose(route, state), viewportWidth);
+}
 
 interface SketchState {
   via?: "jump";
@@ -80,6 +91,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     mapRef,
     layerRef: realLayerRef,
     mapReady: state.phase === "ready" || state.phase === "degraded",
+    enabled: options.realCity,
     paused: Boolean(realmSlug),
     explored: EXPLORED,
     reveal: options.reveal,
@@ -102,7 +114,13 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     const map = mapRef.current;
     if (!map) return Promise.resolve();
     return new Promise<void>((resolve) => {
-      map.once("moveend", () => resolve());
+      // A field-of-view step fires its own moveend; only the flight's own counts.
+      const onEnd = (event: object) => {
+        if ((event as { fovStep?: boolean }).fovStep) return;
+        map.off("moveend", onEnd);
+        resolve();
+      };
+      map.on("moveend", onEnd);
       if (reducedRef.current) map.jumpTo(camera);
       else map.flyTo({ ...camera, duration, essential: true, curve: 1.5 });
     });
@@ -276,29 +294,80 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     else navigate(sketchWorldPath(new URLSearchParams(location.search).toString()), { replace: true });
   }, [location.search, navigate, realmState]);
 
-  // From the real city the jump is a colour flood on the same geometry (S17.5):
-  // the camera flies down as the ink fades and Google's colour comes in.
+  /**
+   * The jump's flights. Diving, the camera ends exactly where the 3D
+   * replay's opening camera will stand (centre, heading, tilt, range and
+   * field of view), so the drawn city gives way to Google's without a jump;
+   * the field of view eases across on the way. The tiles round that spot
+   * start loading as the dive begins, so the drawn buildings are there when
+   * it lands. Coming back, it settles close over the route's start, where
+   * its corridor shows in colour. With the lab switch's real city up, the
+   * dive also floods Google's colour in on the same geometry (S17.5).
+   */
+  // Where the current flight is going, so finishing it early lands there, not mid-air.
+  const flightRef = useRef<(Camera & { fovDeg: number }) | null>(null);
+  const fly = useCallback(
+    (camera: Camera & { fovDeg: number }, duration: number) => {
+      const map = mapRef.current;
+      if (!map) return Promise.resolve();
+      flightRef.current = camera;
+      const fromZoom = map.getZoom();
+      const fromFov = map.getVerticalFieldOfView();
+      const setFov = (fov: number) => map.setVerticalFieldOfView(fov, { fovStep: true });
+      if (reducedRef.current) {
+        setFov(camera.fovDeg);
+        return move(camera, duration);
+      }
+      const onMove = (event: object) => {
+        if (!(event as { fovStep?: boolean }).fovStep) setFov(fovAlongFlight({ fromZoom, toZoom: camera.zoom, zoom: map.getZoom(), fromFov, toFov: camera.fovDeg }));
+      };
+      map.on("move", onMove);
+      return move(camera, duration).then(() => {
+        map.off("move", onMove);
+        setFov(camera.fovDeg);
+      });
+    },
+    [move],
+  );
   const jumpCover: TownJumpCover = useMemo(
     () => ({
-      dive: () => {
+      dive: async () => {
         const line = realmSlug ? lineOf(realmSlug) : undefined;
-        if (!line) return Promise.resolve();
-        const flying = move(routeStartView(line), 2800);
+        const map = mapRef.current;
+        if (!line || !map || !realmSlug) return;
+        const detail = await loadRouteDetail(realmSlug);
+        const canvas = map.getCanvas();
+        const target =
+          detail.status === "ready" && detail.route.route.length > 1
+            ? mapCameraForReplay(openingPose(detail.route, window.innerWidth), { height: canvas.clientHeight })
+            : { ...routeStartView(line), fovDeg: MAPLIBRE_FOV_DEG };
+        (window as Window & { __sketchJumpCamera?: unknown }).__sketchJumpCamera = target;
+        edgesRef.current?.prefetch(target.center[0], target.center[1]);
+        const flying = fly(target, 2800);
         if (!handoverRef.current.real) return flying;
         return Promise.all([flying, handoverRef.current.flood(0, 1, 2800)]).then(() => undefined);
       },
       finish: () => {
-        mapRef.current?.stop();
+        const map = mapRef.current;
+        const target = flightRef.current;
+        map?.stop();
+        // Ends the flight where it was going: the cut must land on the matched camera.
+        if (map && target) {
+          map.setVerticalFieldOfView(target.fovDeg, { fovStep: true });
+          map.jumpTo(target);
+        }
         handoverRef.current.view()?.setFlood(handoverRef.current.real ? 1 : 0);
       },
       travel: () => undefined,
       surface: () => {
-        const flying = move(cityCamera(realmSlug), 2400);
+        const line = realmSlug ? lineOf(realmSlug) : undefined;
+        const camera = line ? { ...routeStartView(line), zoom: 16, pitch: 50 } : cityCamera(realmSlug);
+        const flying = fly({ ...camera, fovDeg: MAPLIBRE_FOV_DEG }, 2400);
         if (!handoverRef.current.real) return flying;
         return Promise.all([flying, handoverRef.current.flood(1, 0, 2400)]).then(() => undefined);
       },
     }),
-    [cityCamera, move, realmSlug],
+    [cityCamera, fly, realmSlug],
   );
 
   const realmEntry = realmSlug ? ENTRIES.find((entry) => entry.slug === realmSlug) : undefined;

@@ -422,7 +422,11 @@ export function OverlandJump({ entry, map, transition, entrance, miniMapRect, on
     <div className={`overland-jump-status-layer${town ? " overland-jump-town-status" : ""}`} data-skin={skin}>
       {phase === "holding" && town ? (
         <div className="overland-jump-travel" data-testid="overland-jump-travel" role="status" style={{ right: 12 + viewport.safe.right, bottom: 48 + viewport.safe.bottom }}>
-          <span className="sr-only">Loading the 3D view.</span>
+          {skin === "sketch" ? (
+            <span className="sketch-travel-note">Loading the 3D city…</span>
+          ) : (
+            <span className="sr-only">Loading the 3D view.</span>
+          )}
           <Key className="overland-jump-status-key" label="Cancel" onClick={() => dispatch({ type: "cancelRequested" })}>
             <SkinLabel skin={skin} text="Cancel" />
           </Key>
