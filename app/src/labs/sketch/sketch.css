@@ -140,9 +140,32 @@
   pointer-events: auto;
 }
 
+/* The breadcrumb: one line that scrolls sideways when her places' names are
+   long, the deepest crumb kept in view; a crumb never wraps or is cut. */
 .sketch-places {
   display: flex;
   gap: var(--sk-gap);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px;
+  margin: -2px;
+}
+
+.sketch-places::-webkit-scrollbar {
+  display: none;
+}
+
+/* Scrolled along: the crumbs it has passed fade under the left edge. */
+.sketch-places[data-scrolled="true"] {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px);
+  mask-image: linear-gradient(to right, transparent 0, #000 28px);
+}
+
+.sketch-places > .sketch-key,
+.sketch-top > .sketch-key {
+  flex: none;
+  white-space: nowrap;
 }
 
 .sketch-review {

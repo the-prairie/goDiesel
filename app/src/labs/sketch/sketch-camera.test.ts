@@ -91,3 +91,15 @@ describe("the region view on a tall phone", () => {
     expect(inView(139.7)).toBe(false);
   });
 });
+
+describe("the region view keeps her places clear of the keys down the right", () => {
+  const screen = { width: 402, height: 874 };
+  it("moves the view so the routes sit left of the keys", () => {
+    const lines: [number, number][][] = [[[11.3, 44.5], [11.4, 44.5]], [[12.4, 41.9], [12.5, 41.9]]];
+    const open = regionView(lines, screen, { top: 70, bottom: 170 });
+    const kept = regionView(lines, screen, { top: 70, bottom: 170, right: 60 });
+    expect(kept.zoom).toBeLessThanOrEqual(open.zoom);
+    // The keys cover the right: the map's middle moves east, so the routes show further left.
+    expect(kept.center[0]).toBeGreaterThan(open.center[0]);
+  });
+});

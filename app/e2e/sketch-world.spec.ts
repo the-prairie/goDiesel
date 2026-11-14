@@ -95,6 +95,26 @@ test("any place she has run opens the same way: Victoria, its routes, choosing o
   await expect(page).not.toHaveURL(/route=/);
 });
 
+for (const width of [402, 360]) {
+  test(`on a ${width} pt phone the breadcrumb never clips a crumb, even with her longest place name`, async ({ page }) => {
+    await stubTiles(page);
+    await page.setViewportSize({ width, height: 874 });
+    await page.goto("/#/lab/sketch");
+    await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+    const list = page.getByTestId("sketch-routes");
+    await list.getByRole("button", { name: /^Japan,/ }).click();
+    await list.getByRole("button", { name: /^Japan, place not named,/ }).click();
+    await list.locator(".sketch-chip").first().click();
+    const crumbs = page.getByRole("group", { name: "Where to look" });
+    const street = crumbs.getByRole("button", { name: "Street" });
+    await expect(street).toHaveAttribute("aria-current", "location");
+    // The deepest crumb is whole on screen, and no crumb wraps onto two lines.
+    await expect.poll(async () => { const box = (await street.boundingBox())!; return box.x >= 0 && box.x + box.width <= width; }).toBe(true);
+    const exit = (await page.getByRole("button", { name: "Exit" }).boundingBox())!;
+    for (const crumb of await crumbs.getByRole("button").all()) expect((await crumb.boundingBox())!.height).toBeCloseTo(exit.height, 0);
+  });
+}
+
 test("says it is drawing the world until the first view is drawn, on a slow connection", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await stubTiles(page, "empty", 2500);

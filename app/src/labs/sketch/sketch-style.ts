@@ -113,7 +113,9 @@ export function sketchStyle({ look, reveal, explored }: SketchStyleInput): Style
 
   if (reveal === "corridor" && explored.length > 0) {
     // The ground itself, inside the corridor, in colour.
-    layers.push({ id: "explored-ground", type: "fill", source: "sketch-corridor", paint: { "fill-color": REAL.ground, "fill-antialias": false } });
+    // Deeper when she first arrives at a place (zoomed out), so the corridor
+    // reads at once; the ground's own colour from street zoom.
+    layers.push({ id: "explored-ground", type: "fill", source: "sketch-corridor", paint: { "fill-color": ["interpolate", ["linear"], ["zoom"], 11, "#e3cd9c", 13.5, REAL.ground], "fill-antialias": false } });
   }
 
   layers.push(

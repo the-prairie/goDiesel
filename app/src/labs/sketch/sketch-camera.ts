@@ -56,18 +56,20 @@ export function cityView(lines: readonly (readonly LngLat[])[], screen: { width:
 
 /**
  * Straight down over a country's routes, or all of them: north up, none closer
- * than a city, fitted into the band between the buttons above and the list
- * below. A tall phone cannot zoom out past the world filling its height, so
- * when her routes are wider than that shows, it shows the stretch of the world
- * with most of them (the rest is a swipe away, and in the list).
+ * than a city, fitted into the band between the buttons above, the list
+ * below and the keys down the right. A tall phone cannot zoom out past the
+ * world filling its height, so when her routes are wider than that shows, it
+ * shows the stretch of the world with most of them (the rest is a swipe away,
+ * and in the list).
  */
-export function regionView(lines: readonly (readonly LngLat[])[], screen: { width: number; height: number }, insets: { top: number; bottom: number } = { top: 0, bottom: 0 }): SketchCamera {
+export function regionView(lines: readonly (readonly LngLat[])[], screen: { width: number; height: number }, insets: { top: number; bottom: number; right?: number } = { top: 0, bottom: 0 }): SketchCamera {
   const box = boundsOf(lines);
-  const band = { width: screen.width, height: Math.max(1, screen.height - insets.top - insets.bottom) };
+  const right = insets.right ?? 0;
+  const band = { width: Math.max(1, screen.width - right), height: Math.max(1, screen.height - insets.top - insets.bottom) };
   const floor = Math.log2(screen.height / 512);
-  let zoom = Math.max(floor, Math.min(11, fitZoom(box, band, Math.min(band.width, band.height) * 0.1)));
+  let zoom = Math.max(floor, Math.min(11, fitZoom(box, band, Math.min(screen.width, band.height) * 0.1)));
   let lng = (box.west + box.east) / 2;
-  const span = (screen.width / (512 * 2 ** zoom)) * 360;
+  const span = (band.width / (512 * 2 ** zoom)) * 360;
   if (box.east - box.west > span) {
     zoom = floor;
     const starts = lines.map((line) => line[0][0]).sort((a, b) => a - b);
@@ -81,6 +83,7 @@ export function regionView(lines: readonly (readonly LngLat[])[], screen: { widt
   }
   // The box's middle, moved so it sits in the middle of the free band.
   const world = 512 * 2 ** zoom;
+  lng += (right / 2 / world) * 360;
   const y = (mercatorY(box.south) + mercatorY(box.north)) / 2 + (insets.bottom - insets.top) / 2 / world;
   const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
   return { center: [lng, lat], zoom, pitch: 0, bearing: 0 };

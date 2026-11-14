@@ -205,13 +205,14 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     const line = slug ? lineOf(slug) : undefined;
     return cityView(line ? [line] : EXPLORED.map((route) => route.line), screen());
   }, []);
-  // The band the map is seen in: below the top keys, above her list.
+  // The band the map is seen in: below the top keys, above her list, left of the map keys.
   const insets = () => {
     const host = hostRef.current?.getBoundingClientRect();
     const list = rootRef.current?.querySelector("[data-testid=sketch-routes]")?.getBoundingClientRect();
     const keys = rootRef.current?.querySelector(".sketch-top")?.getBoundingClientRect();
-    if (!host) return { top: 0, bottom: 0 };
-    return { top: keys ? Math.max(0, keys.bottom - host.top) : 0, bottom: list ? Math.max(0, host.bottom - list.top) : 0 };
+    const side = rootRef.current?.querySelector(".sketch-controls")?.getBoundingClientRect();
+    if (!host) return { top: 0, bottom: 0, right: 0 };
+    return { top: keys ? Math.max(0, keys.bottom - host.top) : 0, bottom: list ? Math.max(0, host.bottom - list.top) : 0, right: side ? Math.max(0, host.right - side.left) : 0 };
   };
   const worldCamera = () => regionView(linesOf(ENTRIES.map((entry) => entry.slug)), screen(), insets());
   const countryCamera = (country: string) => regionView(linesOf(countrySlugs(country)), screen(), insets());
@@ -416,6 +417,14 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     sendAtlas({ type: "routeChosen", slug });
     void move(cityCamera(slug), 2200);
   };
+  // The deepest crumb stays in view when the row is wider than the screen.
+  const crumbsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const row = crumbsRef.current;
+    const current = row?.querySelector<HTMLElement>("[aria-current]");
+    if (row && current) row.scrollLeft = current.offsetLeft + current.offsetWidth - row.clientWidth + 2;
+    if (row) row.dataset.scrolled = String(row.scrollLeft > 0);
+  }, [atlas]);
   const goTo = (level: "world" | "country" | "place" | "street") => {
     if (level === "street") {
       const line = chosen ? lineOf(chosen) : undefined;
@@ -594,7 +603,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
             <button className="sketch-key" onClick={() => navigate(APP_PATHS.atlas)} type="button">
               Exit
             </button>
-            <div aria-label="Where to look" className="sketch-places" role="group">
+            <div aria-label="Where to look" className="sketch-places" onScroll={(event) => (event.currentTarget.dataset.scrolled = String(event.currentTarget.scrollLeft > 0))} ref={crumbsRef} role="group">
               {crumbsOf(atlas).map((crumb) => (
                 <button aria-current={crumb.current ? "location" : undefined} className="sketch-key" key={crumb.level} onClick={() => goTo(crumb.level)} type="button">
                   {crumb.label}

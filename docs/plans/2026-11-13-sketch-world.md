@@ -1072,3 +1072,32 @@ production build, 375×812, two runs each:
 Bundles:
 - sketch world: 91.6 of 93 KiB (raised from 88);
 - review mode: 9.4 of 10 KiB, the readout with it.
+
+**S34, follow-ups.**
+- *Budgets by when they load* (`app/scripts/sketch-budgets.mjs`). Every
+  sketch-*, moment-* and moments-* chunk falls in exactly one bucket; a new
+  chunk in none fails the check.
+  - At opening (the hard one: raise it only with an opening-time
+    measurement alongside): sketch-world-page, edge worker and reveal, 81.6
+    of 84 KiB.
+  - Later: the real-city view behind `?real=1`, 8.0 of 9 KiB; the retired
+    ink hand-over page (its own lab route, never on a normal visit), 3.7 of
+    4.
+  - Moments: with the world 14.8 of 15 KiB; each scene within 8; review
+    mode 9.7 of 10; her catalog page 2.4 of 6.
+- *Fixed from the ugly list.*
+  - World and country views keep her places left of the map keys.
+  - On arriving at a place, the corridor is a deeper sand (from zoom 11,
+    easing to the ground's colour by 13.5), so it reads at once.
+  - The breadcrumb is one line that scrolls sideways: the deepest crumb is
+    kept in view, the crumbs it passed fade under the left edge, and none
+    wraps (checked at 402 and 360 pt with "Japan, place not named").
+- *Still ugly:* "Street" stands against a large wall at the start of her
+  routes in Rome and London (seen); other places not yet checked.
+- *Rome's straight line* is the 96-point summary. The red route line is
+  drawn from the summaries at every zoom and fades out from 14.6; her full
+  track is drawn on the ground from about 15. Not changed yet.
+- *Simulator Safari pass.* Review mode, the readout, a building tap (the
+  laptop message), the marker, the hand-over with her clip, and Back all
+  worked. Two fixes: the readout stops clear of the map keys, and a tap on
+  a building's raised side at a steep camera picks that building.
