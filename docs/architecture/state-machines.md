@@ -99,12 +99,12 @@ These describe the code as it is. The tables below list each lifecycle; these no
 
 | Kind | Entries |
 | --- | --- |
-| `reducer` | 43 |
+| `reducer` | 44 |
 | `disposition` | 1 |
 | `protocol` | 3 |
 | `derived` | 7 |
 | `left-implicit` | 10 |
-| total | 64 |
+| total | 65 |
 
 ### Reducers
 
@@ -153,6 +153,7 @@ These describe the code as it is. The tables below list each lifecycle; these no
 | `moment-assign` | Placing and swapping her planted moments in the sketch world's review mode: the loopback writer is checked first (without it a tap says placing works on the laptop); a tapped building offers the catalog on its street-facing side or the side she turns to; a tapped placed moment can be swapped or removed; a save shows at once and keeps what she had if the writer refuses. | `app/src/labs/sketch/moment-assign-state.ts` | `reduceAssign` | `checking`, `ready`, `blocked`, `placing`, `editing`, `saving`, `failed` | one review session per page; a save carries the document from before it, restored on failure |
 | `sketch-moment` | A planted moment in the sketch world, opened: a tap remembers the camera and approaches the shop front; the scene opens muted with its clip loading, held under Save-Data until asked, or showing no signal when the entry has no clip or it fails; sound is hers to turn on; Back or Escape leaves and the camera returns to where she was. | `app/src/labs/sketch/sketch-moment-state.ts` | `reduceMoment` | `closed`, `approaching`, `open`, `leaving` | the placement id of the moment opened; one at a time |
 | `sketch-ridge-gesture` | The sketch replay's ridge line under one pointer: a tap on the marker plays or pauses, a press elsewhere takes her there, a drag scrubs, a still hold opens the ridge to the 6 km round her until release; a cancelled pointer settles it back. | `app/src/labs/sketch/sketch-ridge-gesture.ts` | `reduceRidgeGesture` | `idle`, `pressing` | the pointer id of the press; events for another pointer are ignored |
+| `sketch-atlas` | Where she is in the sketch atlas: the world, one country, one place and (in a place) the route she has chosen; the breadcrumb names each level she passed through and going up drops what was below. Opening on a named route starts at its place with it chosen. | `app/src/labs/sketch/sketch-atlas-state.ts` | `reduceAtlas` | `world`, `country`, `place` | one atlas position per sketch world page; the chosen route is part of the place state |
 
 ### Dispositions
 

@@ -338,6 +338,14 @@ export function sketchStyle({ look, reveal, explored }: SketchStyleInput): Style
       layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": REAL.route, "line-width": width(1, [[8, 2], [14, 3.5], [18, 7]]), "line-opacity": ["interpolate", ["linear"], ["zoom"], 14.6, 1, 15.5, 0] },
     },
+    // Far out, where a route is smaller than a pixel: a dot where each one starts.
+    {
+      id: "route-start",
+      type: "circle",
+      source: "sketch-starts",
+      maxzoom: 9,
+      paint: { "circle-color": REAL.route, "circle-radius": 4, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 },
+    },
     {
       id: "place-label",
       type: "symbol",
@@ -370,6 +378,10 @@ export function sketchStyle({ look, reveal, explored }: SketchStyleInput): Style
         tileSize: 256,
         maxzoom: 6,
         attribution: RELIEF_ATTRIBUTION,
+      },
+      "sketch-starts": {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: explored.filter((route) => route.line.length > 0).map((route) => ({ type: "Feature" as const, properties: {}, geometry: { type: "Point" as const, coordinates: route.line[0] } })) },
       },
       "sketch-routes": {
         type: "geojson",

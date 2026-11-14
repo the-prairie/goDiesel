@@ -10,6 +10,7 @@
 // fainter stroke.
 
 import { roofUnder } from "@/labs/sketch/sketch-roof-tops";
+import { lineBoxes, linesNearTile } from "@/labs/sketch/sketch-reveal";
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
 
 import type { EdgeRequest, EdgeResponse } from "@/labs/sketch/sketch-edge-worker";
@@ -357,6 +358,8 @@ export function createEdgeLayer({
 }) {
   // The reveal, versioned: a tile drawn for an older version is drawn again.
   let reveal: (Reveal & { version: number }) | null = null;
+  // Each reveal line's box, so a tile is sent only the lines near it.
+  let revealBoxes: ReturnType<typeof lineBoxes> = [];
   let version = 0;
   let exploredCount = 0;
   let map: MapLibreMap | null = null;
@@ -406,7 +409,7 @@ export function createEdgeLayer({
       worker!.postMessage({
         key,
         url,
-        reveal: reveal ? { lines: reveal.lines, radiusM: reveal.radiusM, fade: reveal.fade, version } : null,
+        reveal: reveal ? { lines: linesNearTile(reveal.lines, revealBoxes, { z: TILE_ZOOM, x, y }, reveal.radiusM), radiusM: reveal.radiusM, fade: reveal.fade, version } : null,
       } satisfies EdgeRequest);
     }
   };
@@ -727,6 +730,7 @@ export function createEdgeLayer({
     setReveal(next) {
       version += 1;
       reveal = next && next.radiusM > 0 && next.lines.length > 0 ? { ...next, version } : null;
+      revealBoxes = reveal ? lineBoxes(reveal.lines) : [];
       exploredCount = 0;
       request();
     },

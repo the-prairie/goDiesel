@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { routes } from "@/data/routes";
-import { REVEAL_RADIUS_M, corridorPolygons, exploredRoutes, metresBetween, samplePoints } from "@/labs/sketch/sketch-reveal";
+import { REVEAL_RADIUS_M, corridorPolygons, exploredRoutes, lineBoxes, linesNearTile, metresBetween, samplePoints, type LngLat } from "@/labs/sketch/sketch-reveal";
 
 const KYOTO = ["17636880071", "17654151284"];
 
@@ -89,5 +89,28 @@ describe("corridorPolygons", () => {
 
   it("makes nothing for the line reveal", () => {
     expect(corridorPolygons([line], 0).coordinates).toEqual([]);
+  });
+});
+
+describe("the routes a tile needs", () => {
+  // Kyoto's z14 tile 14370/6490 and a line through it; Victoria and Rome far away.
+  const kyoto: LngLat[] = [[135.75, 34.98], [135.76, 34.99]];
+  const victoria: LngLat[] = [[-123.36, 48.42], [-123.35, 48.43]];
+  const rome: LngLat[] = [[12.49, 41.88], [12.5, 41.89]];
+  const lines = [kyoto, victoria, rome];
+
+  it("sends a tile only the lines that pass within the reveal's reach of it", () => {
+    const near = linesNearTile(lines, lineBoxes(lines), { z: 14, x: 14370, y: 6490 }, 200);
+    expect(near).toEqual([kyoto]);
+  });
+
+  it("keeps a line that only comes within reach of the tile's edge", () => {
+    // A line just west of the tile, 150 m off its edge.
+    const n = 2 ** 14;
+    const westEdge = (14370 / n) * 360 - 180;
+    const offset = 150 / (111320 * Math.cos((35.0 * Math.PI) / 180));
+    const beside: LngLat[] = [[westEdge - offset, 34.98], [westEdge - offset, 34.985]];
+    expect(linesNearTile([beside], lineBoxes([beside]), { z: 14, x: 14370, y: 6490 }, 200)).toEqual([beside]);
+    expect(linesNearTile([beside], lineBoxes([beside]), { z: 14, x: 14370, y: 6490 }, 100)).toEqual([]);
   });
 });

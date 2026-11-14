@@ -95,3 +95,34 @@ export function corridorPolygons(lines: readonly (readonly LngLat[])[], radiusM:
   }
   return { type: "MultiPolygon" as const, coordinates };
 }
+
+/** Each line's box (west, south, east, north), worked out once. */
+export function lineBoxes(lines: readonly (readonly LngLat[])[]) {
+  return lines.map((line) => {
+    let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const [lng, lat] of line) {
+      w = Math.min(w, lng);
+      e = Math.max(e, lng);
+      s = Math.min(s, lat);
+      n = Math.max(n, lat);
+    }
+    return [w, s, e, n] as const;
+  });
+}
+
+/**
+ * The lines a tile needs for its colour: those whose box comes within the
+ * reveal's reach of the tile. A tile in Kyoto is not sent her routes in Rome.
+ */
+export function linesNearTile<T extends readonly LngLat[]>(lines: readonly T[], boxes: readonly (readonly [number, number, number, number])[], tile: { z: number; x: number; y: number }, radiusM: number): T[] {
+  const n = 2 ** tile.z;
+  const lng = (x: number) => (x / n) * 360 - 180;
+  const lat = (y: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n))) * 180) / Math.PI;
+  const [west, east, north, south] = [lng(tile.x), lng(tile.x + 1), lat(tile.y), lat(tile.y + 1)];
+  const dLat = radiusM / 110_574;
+  const dLng = radiusM / (111_320 * Math.cos((((north + south) / 2) * Math.PI) / 180));
+  return lines.filter((_, i) => {
+    const [w, s, e, nn] = boxes[i];
+    return e >= west - dLng && w <= east + dLng && nn >= south - dLat && s <= north + dLat;
+  });
+}

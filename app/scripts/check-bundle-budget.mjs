@@ -96,7 +96,10 @@ if (entry.includes("overland-world-mask")) {
 const sketchChunks = assets.filter((name) => /^sketch-.*\.js$/.test(name));
 let sketchBytes = 0;
 for (const name of sketchChunks) sketchBytes += (await stat(path.join(dist, "assets", name))).size;
-const sketchBudgetBytes = 88 * 1024;
+// 2026-11-14: 93 KiB for every place she has run (round 14: countries,
+// places and routes, the breadcrumb, per-tile route lines); 91.6 KiB used.
+// The opening on slow 4G did not move (first list 3.2 s before and after).
+const sketchBudgetBytes = 93 * 1024;
 if (sketchChunks.length === 0) throw new Error("The sketch world's chunks are missing from the build.");
 if (sketchBytes > sketchBudgetBytes) {
   throw new Error(`The sketch world is ${(sketchBytes / 1024).toFixed(1)} KiB; budget is ${sketchBudgetBytes / 1024} KiB.`);

@@ -1301,6 +1301,26 @@
         "pressing"
       ],
       "identity": "the pointer id of the press; events for another pointer are ignored"
+    },
+    {
+      "id": "sketch-atlas",
+      "kind": "reducer",
+      "area": "react-app",
+      "summary": "Where she is in the sketch atlas: the world, one country, one place and (in a place) the route she has chosen; the breadcrumb names each level she passed through and going up drops what was below. Opening on a named route starts at its place with it chosen.",
+      "module": "app/src/labs/sketch/sketch-atlas-state.ts",
+      "transition": "reduceAtlas",
+      "test": [
+        "app/src/labs/sketch/sketch-atlas-state.test.ts"
+      ],
+      "adapters": [
+        "app/src/labs/sketch/sketch-world-page.tsx"
+      ],
+      "states": [
+        "world",
+        "country",
+        "place"
+      ],
+      "identity": "one atlas position per sketch world page; the chosen route is part of the place state"
     }
   ]
 }

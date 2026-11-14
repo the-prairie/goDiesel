@@ -12,7 +12,7 @@ import { matchCamera } from "@/labs/sketch/sketch-camera-match";
 import { FIRST_VIEW_TIMEOUT_MS, START_TIMEOUT_MS, eligibility, initialHandoverState, reduceHandover, type HandoverEvent } from "@/labs/sketch/sketch-handover-state";
 import type { SketchLook } from "@/labs/sketch/sketch-options";
 import type { RealSketchFactory, RealSketchView } from "@/labs/sketch/sketch-real-view";
-import { REVEAL_RADIUS_M, type ExploredRoute, type RevealMode } from "@/labs/sketch/sketch-reveal";
+import { REVEAL_RADIUS_M, lineBoxes, linesNearTile, type ExploredRoute, type RevealMode } from "@/labs/sketch/sketch-reveal";
 
 /** How long the real city takes to fade in or out. */
 export const HANDOVER_FADE_MS = 700;
@@ -139,7 +139,16 @@ export function useSketchHandover({
         viewRef.current = factory({
           container,
           apiKey,
-          lines: explored.map((route) => route.line),
+          // Only her routes round this city (the z9 tile it stands in, about 70 km).
+          lines: (() => {
+            const map = mapRef.current;
+            const lines = explored.map((route) => route.line);
+            if (!map) return lines;
+            const { lng, lat } = map.getCenter();
+            const s = Math.sin((lat * Math.PI) / 180);
+            const tile = { z: 9, x: Math.floor(((lng + 180) / 360) * 512), y: Math.floor((0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 512) };
+            return linesNearTile(lines, lineBoxes(lines), tile, REVEAL_RADIUS_M[reveal]);
+          })(),
           radiusM: REVEAL_RADIUS_M[reveal],
           soft: reveal === "wash",
           paper: PAPER[look],

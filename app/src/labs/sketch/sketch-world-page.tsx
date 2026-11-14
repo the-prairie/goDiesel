@@ -15,7 +15,9 @@ import { OverlandJump, type TownJumpCover } from "@/labs/overland/overland-jump"
 import { initialOverlandJumpState, townCover, type TownCover } from "@/labs/overland/overland-jump-state";
 import { usePhone } from "@/labs/overland/overland-ui";
 import { applySketchStyle } from "@/labs/sketch/sketch-apply";
-import { cityView, farView, routeStartView, streetView, type SketchCamera } from "@/labs/sketch/sketch-camera";
+import { cityView, regionView, routeStartView, streetView, type SketchCamera } from "@/labs/sketch/sketch-camera";
+import { atlasFromRoute, crumbsOf, initialAtlasState, reduceAtlas, type AtlasState } from "@/labs/sketch/sketch-atlas-state";
+import { groupPlaces, placeOf } from "@/labs/sketch/sketch-places";
 import { createEdgeLayer } from "@/labs/sketch/sketch-edge-layer";
 import { initialSketchMapState, reduceSketchMap } from "@/labs/sketch/sketch-map-state";
 import { sketchOptions, withOption, type SketchLook } from "@/labs/sketch/sketch-options";
@@ -50,11 +52,23 @@ void loadMaplibre().catch(() => undefined);
 // Planted moments live in their own chunk, loaded once the map is up.
 const MomentLayer = lazy(() => import("@/labs/sketch/moment-layer"));
 
-// The proof covers one city: Kyoto and her routes there.
-const CITY = "Kyoto, Japan";
-const ENTRIES = buildOverlandEntries(routes).filter((entry) => entry.place === CITY);
-const EXPLORED = exploredRoutes(routes.filter((route) => route.region === CITY));
+// Every place she has run: her countries, their places and her routes there,
+// from the bundled route summaries (ADR-0004); full tracks load per place.
+const ENTRIES = buildOverlandEntries(routes);
+const EXPLORED = exploredRoutes(routes);
+const COUNTRIES = groupPlaces(ENTRIES.map((entry) => ({ slug: entry.slug, region: entry.place })));
 const lineOf = (slug: string) => EXPLORED.find((route) => route.slug === slug)?.line;
+const linesOf = (slugs: readonly string[]) => slugs.map((slug) => lineOf(slug)).filter((line): line is NonNullable<typeof line> => Boolean(line && line.length > 1));
+const countrySlugs = (country: string) => COUNTRIES.find((group) => group.country === country)?.places.flatMap((place) => place.slugs) ?? [];
+const placeSlugs = (country: string, place: string) => COUNTRIES.find((group) => group.country === country)?.places.find((group) => group.place === place)?.slugs ?? [];
+const routesLabel = (count: number) => `${count} route${count === 1 ? "" : "s"}`;
+/** Where a route sits in the atlas: its place, with it chosen. */
+function atlasOf(slug: string | null): AtlasState {
+  const entry = slug ? ENTRIES.find((candidate) => candidate.slug === slug) : undefined;
+  if (!entry) return initialAtlasState();
+  const { place, country } = placeOf(entry.place);
+  return atlasFromRoute({ slug: entry.slug, place, country: country ?? "Unplaced" });
+}
 
 /** What the tiles are searched for: her routes and how far colour reaches. */
 const revealFor = (mode: RevealMode) => ({ lines: EXPLORED.map((route) => route.line), radiusM: REVEAL_RADIUS_M[mode], fade: mode === "wash" });
@@ -111,6 +125,19 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
   const [state, dispatch] = useReducer(reduceSketchMap, undefined, initialSketchMapState);
   const chosen = searchParams.get("route") ?? realmSlug ?? null;
   const chosenEntry = ENTRIES.find((entry) => entry.slug === chosen);
+  const [atlas, sendAtlas] = useReducer(reduceAtlas, chosen, atlasOf);
+  const atlasRef = useRef(atlas);
+  atlasRef.current = atlas;
+  // A route newly named in the link (coming back from its 3D world) opens its
+  // place. Only a change of route counts: going up clears it a moment later.
+  useEffect(() => {
+    const current = atlasRef.current;
+    if (!chosen || (current.phase === "place" && current.route === chosen)) return;
+    const next = atlasOf(chosen);
+    if (next.phase !== "place") return;
+    sendAtlas({ type: "placeChosen", country: next.country, place: next.place });
+    sendAtlas({ type: "routeChosen", slug: chosen });
+  }, [chosen]);
   const styleRef = useRef(sketchStyle({ look: options.look, reveal: options.reveal, explored: EXPLORED }));
   const [jumpCoverState, setCover] = useState<TownCover>(() => townCover(initialOverlandJumpState()));
   const cover = realmSlug ? jumpCoverState : townCover(initialOverlandJumpState());
@@ -149,6 +176,25 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     };
   }, [chosen, realmSlug, mapUp]);
   const [momentOpen, setMomentOpen] = useState(false);
+  // Her routes on the ground, close up, in the place she is looking at: first
+  // their summaries, then at full resolution, so they follow the streets she ran.
+  const [edgesReady, setEdgesReady] = useState(false);
+  const groundPlace = atlas.phase === "place" ? `${atlas.country}\u0000${atlas.place}` : null;
+  useEffect(() => {
+    const edges = edgesRef.current;
+    if (!edgesReady || !edges || !groundPlace) return;
+    const [country, place] = groundPlace.split("\u0000");
+    const slugs = placeSlugs(country, place);
+    edges.setRoutes(linesOf(slugs));
+    let cancelled = false;
+    void Promise.all(slugs.map((slug) => loadRouteDetail(slug))).then((results) => {
+      const lines = results.flatMap((result) => (result.status === "ready" && result.route.route.length > 1 ? [result.route.route.map((point): [number, number] => [point.lng, point.lat])] : []));
+      if (!cancelled && lines.length && edgesRef.current === edges) edges.setRoutes(lines);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [edgesReady, groundPlace]);
   const handoverRef = useRef(handover);
   handoverRef.current = handover;
   const reducedRef = useRef(reducedMotion);
@@ -159,6 +205,17 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     const line = slug ? lineOf(slug) : undefined;
     return cityView(line ? [line] : EXPLORED.map((route) => route.line), screen());
   }, []);
+  // The band the map is seen in: below the top keys, above her list.
+  const insets = () => {
+    const host = hostRef.current?.getBoundingClientRect();
+    const list = rootRef.current?.querySelector("[data-testid=sketch-routes]")?.getBoundingClientRect();
+    const keys = rootRef.current?.querySelector(".sketch-top")?.getBoundingClientRect();
+    if (!host) return { top: 0, bottom: 0 };
+    return { top: keys ? Math.max(0, keys.bottom - host.top) : 0, bottom: list ? Math.max(0, host.bottom - list.top) : 0 };
+  };
+  const worldCamera = () => regionView(linesOf(ENTRIES.map((entry) => entry.slug)), screen(), insets());
+  const countryCamera = (country: string) => regionView(linesOf(countrySlugs(country)), screen(), insets());
+  const placeCamera = (country: string, place: string) => cityView(linesOf(placeSlugs(country, place)), screen());
 
   /** Moves the camera: a flight, or a cut with reduced motion. Resolves when it is there. */
   const move = useCallback((camera: Camera, duration = 2600) => {
@@ -185,7 +242,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
     const loadId = Date.now();
     dispatch({ type: "loadStarted", loadId });
     const back = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("route");
-    const start: Camera = realmSlug ? routeStartView(lineOf(realmSlug) ?? EXPLORED[0].line) : back && lineOf(back) ? cityCamera(back) : farView();
+    const start: Camera = realmSlug ? routeStartView(lineOf(realmSlug) ?? EXPLORED[0].line) : back && lineOf(back) ? cityCamera(back) : regionView(linesOf(ENTRIES.map((entry) => entry.slug)), screen(), insets());
     const create = (maplibregl: MapLibreModule) => {
     let map: MapLibreMap;
     try {
@@ -206,7 +263,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
       return;
     }
     mapRef.current = map;
-    map.getCanvas().setAttribute("aria-label", "A sketched map of the world, from Japan down to Kyoto's streets. Her routes are drawn in red; the list of routes follows.");
+    map.getCanvas().setAttribute("aria-label", "A sketched map of the world, down to the streets of every place she has run. Her routes are drawn in red; the list of her places follows.");
     // Ready once the first view is drawn, tiles and all, not merely styled:
     // until then the page says it is drawing the world.
     map.once("idle", () => {
@@ -234,12 +291,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           map.addLayer(edges, "route-casing");
           edgesRef.current = edges;
           edges.setReveal(revealFor(revealRef.current));
-          edges.setRoutes(EXPLORED.map((route) => route.line));
-          // Her routes at full resolution, so close up they follow the streets she ran.
-          void Promise.all(ENTRIES.map((entry) => loadRouteDetail(entry.slug))).then((results) => {
-            const lines = results.flatMap((result) => (result.status === "ready" && result.route.route.length > 1 ? [result.route.route.map((point): [number, number] => [point.lng, point.lat])] : []));
-            if (lines.length && edgesRef.current === edges) edges.setRoutes(lines);
-          });
+          setEdgesReady(true);
         } catch {
           if (map.getLayer("building-edges")) map.removeLayer("building-edges");
         }
@@ -361,7 +413,28 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
   const choose = (slug: string) => {
     if (chosen === slug) return jump(slug);
     setParam("route", slug);
+    sendAtlas({ type: "routeChosen", slug });
     void move(cityCamera(slug), 2200);
+  };
+  const goTo = (level: "world" | "country" | "place" | "street") => {
+    if (level === "street") {
+      const line = chosen ? lineOf(chosen) : undefined;
+      if (line) void move(streetView(line), 2400);
+      return;
+    }
+    if (level !== "place" || (atlas.phase === "place" && atlas.route)) setParam("route", null);
+    sendAtlas({ type: "up", to: level });
+    if (level === "world") void move(worldCamera(), 3200);
+    else if (level === "country" && atlas.phase !== "world") void move(countryCamera(atlas.country), 3200);
+    else if (level === "place" && atlas.phase === "place") void move(placeCamera(atlas.country, atlas.place), 2600);
+  };
+  const openCountry = (country: string) => {
+    sendAtlas({ type: "countryChosen", country });
+    void move(countryCamera(country), 3200);
+  };
+  const openPlace = (country: string, place: string) => {
+    sendAtlas({ type: "placeChosen", country, place });
+    void move(placeCamera(country, place), 3200);
   };
   const jump = (slug: string) => {
     const query = new URLSearchParams(searchParams);
@@ -463,7 +536,10 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
   useEffect(() => {
     if (realmSlug) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented && chosen) setParam("route", null);
+      if (event.key === "Escape" && !event.defaultPrevented && chosen) {
+        setParam("route", null);
+        sendAtlas({ type: "up", to: "place" });
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -492,7 +568,9 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           rootRef.current = element;
           setRootElement(element);
         }}>
-        <h1 className="sr-only">Kyoto, sketched: {ENTRIES.length} routes</h1>
+        <h1 className="sr-only">
+          Her places, sketched: {routesLabel(ENTRIES.length)} in {COUNTRIES.length} countries
+        </h1>
         <div className="sketch-stage" data-cover-opacity={cover.opacity} inert={!cover.interactive || momentOpen} style={stageStyle}>
           <div className="sketch-map" data-testid="sketch-map" ref={hostRef} role="region" aria-label="Sketched map" />
           {/* The real city, Google's 3D drawn as the sketch, fading in over the drawn one. */}
@@ -517,17 +595,11 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
               Exit
             </button>
             <div aria-label="Where to look" className="sketch-places" role="group">
-              <button className="sketch-key" onClick={() => void move(farView(), 3200)} type="button">
-                Japan
-              </button>
-              <button className="sketch-key" onClick={() => void move(cityCamera(chosen), 3200)} type="button">
-                Kyoto
-              </button>
-              {chosen && lineOf(chosen) ? (
-                <button className="sketch-key" onClick={() => void move(streetView(lineOf(chosen)!), 2400)} type="button">
-                  Street
+              {crumbsOf(atlas).map((crumb) => (
+                <button aria-current={crumb.current ? "location" : undefined} className="sketch-key" key={crumb.level} onClick={() => goTo(crumb.level)} type="button">
+                  {crumb.label}
                 </button>
-              ) : null}
+              ))}
             </div>
           </div>
 
@@ -568,25 +640,46 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
 
           <section aria-labelledby="sketch-routes-title" className="sketch-routes" data-testid="sketch-routes">
             <h2 className="sr-only" id="sketch-routes-title">
-              Her routes in Kyoto
+              {atlas.phase === "world" ? "Her countries" : atlas.phase === "country" ? `Her places in ${atlas.country}` : `Her routes in ${atlas.place}`}
             </h2>
             <ol className="sketch-chips">
-              {ENTRIES.map((entry) => (
-                <li key={entry.slug}>
-                  <button
-                    aria-label={`${routeNumberLabel(entry.number)}, ${entry.title}, ${entry.km.toFixed(1)} km${chosen === entry.slug ? ". Chosen: press again to jump in" : ""}`}
-                    aria-pressed={chosen === entry.slug}
-                    className="sketch-chip"
-                    data-slug={entry.slug}
-                    onClick={() => choose(entry.slug)}
-                    type="button"
-                  >
-                    <span className="sketch-chip-number">{String(entry.number).padStart(3, "0")}</span>
-                    <span className="sketch-chip-title">{entry.title}</span>
-                    <span className="sketch-chip-km">{entry.km.toFixed(1)} km</span>
-                  </button>
-                </li>
-              ))}
+              {atlas.phase === "world"
+                ? COUNTRIES.map((group) => {
+                    const count = group.places.reduce((sum, place) => sum + place.slugs.length, 0);
+                    return (
+                      <li key={group.country}>
+                        <button aria-label={`${group.country}, ${routesLabel(count)}`} className="sketch-chip" onClick={() => openCountry(group.country)} type="button">
+                          <span className="sketch-chip-title">{group.country}</span>
+                          <span className="sketch-chip-km">{routesLabel(count)}</span>
+                        </button>
+                      </li>
+                    );
+                  })
+                : atlas.phase === "country"
+                  ? (COUNTRIES.find((group) => group.country === atlas.country)?.places ?? []).map((group) => (
+                      <li key={group.place}>
+                        <button aria-label={`${group.place}, ${routesLabel(group.slugs.length)}`} className="sketch-chip" onClick={() => openPlace(atlas.country, group.place)} type="button">
+                          <span className="sketch-chip-title">{group.place}</span>
+                          <span className="sketch-chip-km">{routesLabel(group.slugs.length)}</span>
+                        </button>
+                      </li>
+                    ))
+                  : ENTRIES.filter((entry) => placeSlugs(atlas.country, atlas.place).includes(entry.slug)).map((entry) => (
+                      <li key={entry.slug}>
+                        <button
+                          aria-label={`${routeNumberLabel(entry.number)}, ${entry.title}, ${entry.km.toFixed(1)} km${chosen === entry.slug ? ". Chosen: press again to jump in" : ""}`}
+                          aria-pressed={chosen === entry.slug}
+                          className="sketch-chip"
+                          data-slug={entry.slug}
+                          onClick={() => choose(entry.slug)}
+                          type="button"
+                        >
+                          <span className="sketch-chip-number">{String(entry.number).padStart(3, "0")}</span>
+                          <span className="sketch-chip-title">{entry.title}</span>
+                          <span className="sketch-chip-km">{entry.km.toFixed(1)} km</span>
+                        </button>
+                      </li>
+                    ))}
             </ol>
             {chosenEntry ? (
               <button className="sketch-key sketch-jump" data-testid="sketch-jump" onClick={() => jump(chosenEntry.slug)} type="button">

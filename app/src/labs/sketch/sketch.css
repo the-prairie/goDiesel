@@ -222,6 +222,12 @@
   display: none;
 }
 
+/* Each chip keeps its width; a long title wraps inside it (at most 70vw) and
+   the row scrolls sideways: many places or routes, never squeezed. */
+.sketch-chips > li {
+  flex: 0 0 auto;
+}
+
 .sketch-chip {
   display: grid;
   grid-template-columns: auto auto;

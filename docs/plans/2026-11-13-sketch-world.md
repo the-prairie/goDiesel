@@ -1003,3 +1003,72 @@ Bundles:
     bob.
   - Planted moments with the world: 14.8 KiB (budget 15, raised by 1). The
     sketch world: 87.3 of 88 KiB.
+
+## Round 14: the sketch world opens every route
+
+**S34. World, country, place, route, for all 66 of her runs.**
+- *Where the index comes from.* Every route's summary (its place, distance,
+  start and a 96-point line) is already in the bundled manifest (ADR-0004),
+  so the atlas needs no new projection and nothing under `generated/` or
+  `public/data/routes/` changes. A place's full tracks load when she
+  enters it.
+- *Places and countries* (`sketch-places.ts`) are read from each route's
+  region name by exact tables: "Place, Country" and "Place, State or
+  Province", plus five regions that name no country. Nothing is matched
+  loosely, and a region the tables do not know stays unplaced. All 66 are
+  placed: 8 countries, 29 places.
+  - Open questions for the owner, not guessed:
+    - two routes named only "Japan" sit in Kyoto and Tokyo by their
+      coordinates; they are kept as their own place;
+    - "Veneto, Italy" is its own place beside Treviso and Verona, which
+      are in Veneto;
+    - the Canary Islands (172 km across, several islands), Mainland Greece
+      (154 km), Crete (74 km) and Bali (60 km) are one place each;
+    - five routes reach 26 to 67 km from their start (Highwood Pass,
+      Banff/Kananaskis, two on the Costa Brava, Victoria's "Tour de farm");
+    - the one route with no timing (Rome, "discovered") is not hers, so it
+      is not in the atlas.
+- *Getting around* (the `sketch-atlas` lifecycle):
+  - The breadcrumb names each level she passed through: World, the
+    country, the place, and Street once a route is chosen. The list below
+    shows her countries, then that country's places, then that place's
+    route cards with Jump in.
+  - A route named in the link opens its place with it chosen.
+- *Cameras.* The world and a country are seen straight down, fitted into
+  the band between the keys above and the list below.
+  - A tall phone cannot zoom out past the world filling its height (zoom
+    0.77 at 874 px: about 166° across). Her places span 262°, so the world
+    view shows the stretch with most of her routes (the Americas and
+    Europe); Japan and Bali are a swipe away, and in the list.
+  - Far out, a dot marks where each route starts.
+- *Colour everywhere.* Every route's corridor and reveal are drawn.
+  - Each tile is now sent only the route lines near it (`linesNearTile`).
+    With all routes, the routes' box covered the planet, so every building
+    was being checked against about 6,000 segments.
+  - The real-city view, behind the lab switch, gets the lines near its
+    city.
+  - Exercised outside Japan for the first time: Victoria, Rome and London
+    (corridors in colour, regional buildings), and the ridge line on a
+    Victoria route.
+- *Merely ugly, listed:*
+  - "Street" puts the camera low at a route's start, which in Rome and
+    London is often against a large wall.
+  - At a place's own zoom the corridor's colour is faint (it strengthens
+    from about 12.5).
+  - In the world view the zoom keys cover the Greek dots.
+- *The phone readout* (`?review=1`): frame time (average and worst over
+  3 s), tiles drawn of wanted, the last tile's build time, triangles,
+  canvas size and pixel ratio, and WebGL context losses, on one line with a
+  Copy button. It lives in the review chunk.
+
+The opening on slow 4G (1.6 Mbps, 150 ms) with the CPU slowed 4×,
+production build, 375×812, two runs each:
+
+| | First list shown | Map created | First render | First tile | Idle |
+|---|---|---|---|---|---|
+| Before (her Kyoto routes listed) | 3.28 / 3.19 s | 4.61 / 4.53 s | 5.02 / 4.82 s | 11.2 / 11.1 s | 14.1 / 12.8 s |
+| After (her countries listed) | 3.27 / 3.22 s | 4.58 / 4.50 s | 5.09 / 4.98 s | 10.9 / 10.8 s | 13.6 / 13.4 s |
+
+Bundles:
+- sketch world: 91.6 of 93 KiB (raised from 88);
+- review mode: 9.4 of 10 KiB, the readout with it.
