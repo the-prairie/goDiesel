@@ -94,3 +94,27 @@ Consequences:
 
 Evidence: `admin.py`, `admin_moments.py`, `test_admin_moments.py`,
 `app/e2e/live-pipeline.spec.ts`.
+
+## Amendment (2026-11-14): starting without the Strava export
+
+The writer used to read `DieselDiaries/activities.csv` as it started, so on a
+machine without her private Strava export it could not start at all, and
+placing moments, which never reads the export, could not save.
+
+Now:
+- With the export, nothing changes.
+- Without it, the writer starts, reports `strava_export: false` in its
+  status, and serves `GET`/`PUT /api/admin/moments`.
+- Every route that reads the export (`/api/routes`, `/api/polyline/*`,
+  `/api/classify-status` and every `POST`) answers 503 with a plain message
+  that names the missing file and says placing moments still works.
+- It does not build or write `.geo_cache.json`, which would otherwise record
+  every route as having no start point.
+- The bind, origin check, size cap and lock are unchanged. The origin check
+  still answers first (403).
+
+`admin.sh` now passes its app port to the writer's allowed origins and to the
+dev server (`--port <app port> --strictPort`). It also opens a chosen page
+(`GODIESEL_OPEN_PATH`). With the defaults, it behaves as before.
+
+Evidence: `test_admin_export.py`, `test_admin_sh.py`.

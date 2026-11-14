@@ -54,7 +54,8 @@ def launcher(tmp_path):
     marks.mkdir()
     # A writer that never serves, so nothing answers on the admin port.
     (checkout / "admin.py").write_text(
-        f"open({str(marks / 'admin-started')!r}, 'w').close()\n"
+        "import os\n"
+        f"open({str(marks / 'admin-started')!r}, 'w').write(os.environ.get('GODIESEL_APP_ORIGINS', ''))\n"
     )
     shims = tmp_path / "bin"
     shims.mkdir()
@@ -65,17 +66,18 @@ def launcher(tmp_path):
     admin_port, app_port = free_port(), free_port()
     stubs = []
 
-    def run(admin_status=None, app=False, attempts=4):
+    def run(admin_status=None, app=False, attempts=4, extra=None):
         if admin_status is not None:
             stubs.append(Stub(admin_port, admin_status))
         if app:
             stubs.append(Stub(app_port))
         env = {
-            **os.environ,
+            **{k: v for k, v in os.environ.items() if k not in ("GODIESEL_APP_ORIGINS", "GODIESEL_OPEN_PATH")},
             "PATH": f"{shims}:{os.environ['PATH']}",
             "GODIESEL_ADMIN_PORT": str(admin_port),
             "GODIESEL_APP_PORT": str(app_port),
             "GODIESEL_ADMIN_READY_ATTEMPTS": str(attempts),
+            **(extra or {}),
         }
         return subprocess.run(
             [str(checkout / "admin.sh")],  # its own shebang, /bin/bash on macOS
@@ -142,3 +144,26 @@ def test_a_writer_for_this_checkout_opens_the_admin(launcher):
     )
     assert not (launcher.marks / "admin-started").exists()
     assert "unbound variable" not in result.stderr
+
+
+def test_the_writer_it_starts_accepts_the_app_on_its_port(launcher):
+    launcher()
+    port = launcher.app_port
+    assert (launcher.marks / "admin-started").read_text() == f"http://localhost:{port},http://127.0.0.1:{port}"
+
+
+def test_origins_the_caller_set_are_kept(launcher):
+    launcher(extra={"GODIESEL_APP_ORIGINS": "http://127.0.0.1:9999"})
+    assert (launcher.marks / "admin-started").read_text() == "http://127.0.0.1:9999"
+
+
+def test_the_app_it_starts_listens_on_the_app_port(launcher):
+    launcher()
+    assert (launcher.marks / "npm").read_text().split() == ["--prefix", "app", "run", "dev", "--", "--port", str(launcher.app_port), "--strictPort"]
+
+
+def test_it_can_open_another_page_such_as_placing_moments(launcher):
+    page = "#/lab/sketch?route=17636880071&review=1"
+    result = launcher(admin_status=status(str(launcher.checkout)), app=True, extra={"GODIESEL_OPEN_PATH": page})
+    assert result.returncode == 0, result.stderr
+    assert (launcher.marks / "open").read_text().strip() == f"http://127.0.0.1:{launcher.app_port}/{page}"

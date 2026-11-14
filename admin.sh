@@ -13,7 +13,12 @@ fi
 ADMIN_PORT="${GODIESEL_ADMIN_PORT:-8766}"
 APP_PORT="${GODIESEL_APP_PORT:-8787}"
 READY_ATTEMPTS="${GODIESEL_ADMIN_READY_ATTEMPTS:-40}"
+# The page to open: the Admin, or for placing moments
+# '#/lab/sketch?route=17636880071&review=1'.
+OPEN_PATH="${GODIESEL_OPEN_PATH:-#/admin}"
 export GODIESEL_ADMIN_PORT="${ADMIN_PORT}"
+# The writer accepts the app on the port it is served from (loopback only).
+export GODIESEL_APP_ORIGINS="${GODIESEL_APP_ORIGINS:-http://localhost:${APP_PORT},http://127.0.0.1:${APP_PORT}}"
 CHECKOUT_ROOT="$(pwd -P)"
 
 PIDS=()
@@ -58,7 +63,7 @@ fi
 
 if ! curl -fs "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
   echo "Starting React app on port ${APP_PORT}..."
-  npm --prefix app run dev &
+  npm --prefix app run dev -- --port "${APP_PORT}" --strictPort &
   PIDS+=("$!")
 fi
 
@@ -83,7 +88,7 @@ if [ "${admin_ready}" != true ] || [ "${app_ready}" != true ]; then
 fi
 verify_admin_checkout
 
-open "http://127.0.0.1:${APP_PORT}/#/admin"
+open "http://127.0.0.1:${APP_PORT}/${OPEN_PATH}"
 
 if [ "${#PIDS[@]}" -gt 0 ]; then
   echo "Admin is ready. Press Ctrl+C to stop processes started by this script."

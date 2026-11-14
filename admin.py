@@ -130,14 +130,26 @@ def parse_strava_date(s):
         return None
 
 
-print('Loading activities.csv…')
-df = pd.read_csv(DD / 'activities.csv', low_memory=False)
-df['date'] = df['Activity Date'].apply(parse_strava_date)
-df['act_id'] = df['Filename'].fillna('').astype(str).apply(
-    lambda s: re.match(r'.*?/(\d+)', s).group(1) if re.match(r'.*?/(\d+)', s) else None
+# Route curation reads her Strava export; placing moments does not. Without
+# the export the writer still starts, serves status and moments, and refuses
+# the curation routes with this message (ADR-0010).
+STRAVA_EXPORT = (DD / 'activities.csv').is_file()
+NO_EXPORT_MESSAGE = (
+    f'The Strava export ({DD / "activities.csv"}) is not on this machine, '
+    'so route curation is unavailable. Placing moments still works.'
 )
-acts_by_id = {r['act_id']: r for _, r in df.iterrows() if r['act_id']}
-print(f'  {len(acts_by_id)} activities indexed.')
+if STRAVA_EXPORT:
+    print('Loading activities.csv…')
+    df = pd.read_csv(DD / 'activities.csv', low_memory=False)
+    df['date'] = df['Activity Date'].apply(parse_strava_date)
+    df['act_id'] = df['Filename'].fillna('').astype(str).apply(
+        lambda s: re.match(r'.*?/(\d+)', s).group(1) if re.match(r'.*?/(\d+)', s) else None
+    )
+    acts_by_id = {r['act_id']: r for _, r in df.iterrows() if r['act_id']}
+    print(f'  {len(acts_by_id)} activities indexed.')
+else:
+    acts_by_id = {}
+    print(f'No activities.csv: {NO_EXPORT_MESSAGE}')
 
 
 def find_activity_file_early(aid):
@@ -212,9 +224,13 @@ def build_geo_cache():
     return cache
 
 
-print('Loading geo cache…')
-geo_cache = build_geo_cache()
-print(f'  {sum(1 for v in geo_cache.values() if v.get("region")):,} routes geo-tagged.')
+if STRAVA_EXPORT:
+    print('Loading geo cache…')
+    geo_cache = build_geo_cache()
+    print(f'  {sum(1 for v in geo_cache.values() if v.get("region")):,} routes geo-tagged.')
+else:
+    # Building it now would record every route as having no start point.
+    geo_cache = {}
 
 
 # ── Reverse-geocoding (Nominatim, rate-limited, persistent bucket cache) ──
@@ -663,6 +679,9 @@ class Handler(BaseHTTPRequestHandler):
             asset = (QUESTS / ADMIN_ASSETS[path]).read_bytes()
             self._send(200, asset, 'text/javascript; charset=utf-8')
             return
+        if not STRAVA_EXPORT and (path in ('/api/routes', '/api/classify-status') or path.startswith('/api/polyline/')):
+            self._send(503, {'error': NO_EXPORT_MESSAGE})
+            return
         if path == '/api/routes':
             self._send(200, routes_summary())
             return
@@ -678,6 +697,7 @@ class Handler(BaseHTTPRequestHandler):
                 ),
                 'rebuild': _rebuild_snapshot(),
                 'checkout_root': str(QUESTS),
+                'strava_export': STRAVA_EXPORT,
                 'pid': os.getpid(),
             })
             return
@@ -806,6 +826,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if not self._origin_allowed():
             self._send(403, {'error': 'origin not allowed'})
+            return
+        if not STRAVA_EXPORT:
+            self._send(503, {'error': NO_EXPORT_MESSAGE})
             return
         # Media arrives as raw bytes, so it is handled before the UTF-8 decode
         # that every JSON endpoint depends on.
