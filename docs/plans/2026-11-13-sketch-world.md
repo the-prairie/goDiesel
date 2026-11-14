@@ -1091,7 +1091,8 @@ Bundles:
     easing to the ground's colour by 13.5), so it reads at once.
   - The breadcrumb is one line that scrolls sideways: the deepest crumb is
     kept in view, the crumbs it passed fade under the left edge, and none
-    wraps (checked at 402 and 360 pt with "Japan, place not named").
+    wraps (checked at 402 and 360 pt with her longest place name; since
+    round 16 that is "Banff and Kananaskis").
 - *Still ugly:* "Street" stands against a large wall at the start of her
   routes in Rome and London (seen); other places not yet checked.
 - *Rome's straight line* is the 96-point summary. The red route line is
@@ -1134,3 +1135,26 @@ Bundles:
     unreliable. Identical cameras scored 0.01 and 0.38 on different runs,
     and on a tilted view any building low in the frame counts. Its numbers
     are reported, not used as the judge.
+
+## Round 16: the owner's decisions on where a route belongs
+
+**S36. Her two routes named only "Japan" are in Kyoto and Tokyo.**
+- Her words: "Yes, the Japan ones, one is Kyoto and one Tokyo." By their
+  coordinates, route 17626995684 (35.03, 135.78) is Kyoto and 17586941421
+  (35.68, 139.73) is Tokyo.
+- *How.* The region names come from generated data, which only `build.py`
+  may write (ADR-0003), and it cannot run here without her Strava export.
+  So the sketch atlas reads an owner-decisions table (`OWNER_PLACES` in
+  `sketch-places.ts`): route id to place and country, exact and explicit,
+  dated with her decision.
+  - A decision may name a place the data does not have yet. A place left
+    with no routes is gone: "Japan, place not named" no longer appears.
+  - Kyoto now lists 3 routes and Tokyo 4; her countries and places still
+    count all 66 routes once each.
+  - Building styles still come from coordinates, so they are unchanged.
+- *The fix belongs at the source.* Set the route's region in
+  `quests.json`, then rebuild, once the export is back on a machine; then
+  delete its entry in the table. The table's test fails loudly while a
+  route's own data already says the same place.
+- *Coming:* her names for splitting the Canary Islands, Mainland Greece,
+  Crete and Bali go into the same table as their own commit.

@@ -28,6 +28,32 @@ const WHOLE: Record<string, { place: string; country: string }> = {
   Japan: { place: "Japan, place not named", country: "Japan" },
 };
 
+export interface PlaceDecision {
+  place: string;
+  country: string;
+}
+
+/**
+ * The owner's decisions on where a route belongs, by route id: its place and
+ * country in place of what its generated region says. Exact and explicit,
+ * never inferred. A place may be one the data does not have yet; a place left
+ * with no routes is gone. Each belongs at the source (the route's region in
+ * quests.json, then a rebuild); once that is done, delete its entry here (the
+ * test fails while a route's own data already says the same).
+ */
+export const OWNER_PLACES: Readonly<Record<string, PlaceDecision>> = {
+  // 2026-11-14, the owner: "Yes, the Japan ones, one is Kyoto and one Tokyo."
+  // Named only "Japan" in its data; it was run in Kyoto (35.03, 135.78).
+  "17626995684": { place: "Kyoto", country: "Japan" },
+  // Same decision; run in Tokyo (35.68, 139.73).
+  "17586941421": { place: "Tokyo", country: "Japan" },
+};
+
+/** A route's place and country, with the owner's decision where she has made one. */
+export function placeFor(slug: string, region: string, decisions: Readonly<Record<string, PlaceDecision>> = OWNER_PLACES) {
+  return decisions[slug] ?? placeOf(region);
+}
+
 export function placeOf(region: string): { place: string; country: string | null } {
   if (WHOLE[region]) return WHOLE[region];
   const comma = region.lastIndexOf(", ");
@@ -49,10 +75,10 @@ export interface CountryGroup {
 }
 
 /** Routes grouped by country and place, both in alphabetical order; routes keep their order. */
-export function groupPlaces(routes: readonly { slug: string; region: string }[]): CountryGroup[] {
+export function groupPlaces(routes: readonly { slug: string; region: string }[], decisions: Readonly<Record<string, PlaceDecision>> = OWNER_PLACES): CountryGroup[] {
   const countries = new Map<string, Map<string, string[]>>();
   for (const { slug, region } of routes) {
-    const { place, country } = placeOf(region);
+    const { place, country } = placeFor(slug, region, decisions);
     const key = country ?? "Unplaced";
     const places = countries.get(key) ?? new Map<string, string[]>();
     countries.set(key, places);

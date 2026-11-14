@@ -9,6 +9,8 @@ import { installGoogleReplay } from "./helpers/google-replay";
 
 const GOLD = { slug: "17636880071", title: "i love goooooooolddddddddd" };
 const PEACH = { slug: "17654151284", title: "🍑🍑🍑🍑💦💦💦💦" };
+// Named only "Japan" in its data; in Kyoto by the owner's decision (sketch-places OWNER_PLACES).
+const RACING = { slug: "17626995684" };
 
 // A 1x1 transparent PNG, for the relief tiles.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
@@ -42,7 +44,7 @@ async function toKyoto(page: Page) {
   const list = page.getByTestId("sketch-routes");
   await list.getByRole("button", { name: /^Japan,/ }).click();
   await list.getByRole("button", { name: /^Kyoto,/ }).click();
-  await expect(list.getByRole("button").first()).toContainText(GOLD.title);
+  await expect(list.locator(`.sketch-chip[data-slug="${GOLD.slug}"]`)).toBeVisible();
 }
 
 test("opens on the sketched world with all her places: country, then place, then her routes there, OpenStreetMap credited", async ({ page }) => {
@@ -57,12 +59,14 @@ test("opens on the sketched world with all her places: country, then place, then
   await expect(list.getByRole("button").first()).toHaveAccessibleName("Canada, 18 routes");
   await list.getByRole("button", { name: /^Japan,/ }).click();
   await expect(crumbs.getByRole("button", { name: "Japan" })).toHaveAttribute("aria-current", "location");
-  await expect(list.getByRole("button", { name: /^Kyoto, 2 routes$/ })).toBeVisible();
+  await expect(list.getByRole("button", { name: /^Kyoto, 3 routes$/ })).toBeVisible();
   await list.getByRole("button", { name: /^Kyoto,/ }).click();
   await expect(crumbs.getByRole("button", { name: "Kyoto" })).toHaveAttribute("aria-current", "location");
   const routes = list.getByRole("button");
-  await expect(routes.nth(0)).toContainText(GOLD.title);
-  await expect(routes.nth(1)).toContainText(PEACH.title);
+  // Her own words put the route named only "Japan" here; by date it comes first.
+  await expect(routes.nth(0)).toHaveAttribute("data-slug", RACING.slug);
+  await expect(routes.nth(1)).toContainText(GOLD.title);
+  await expect(routes.nth(2)).toContainText(PEACH.title);
   // Back up to the world in one tap.
   await crumbs.getByRole("button", { name: "World" }).click();
   await expect(list.getByRole("button")).toHaveCount(8);
@@ -96,20 +100,22 @@ test("any place she has run opens the same way: Victoria, its routes, choosing o
 });
 
 for (const width of [402, 360]) {
-  test(`on a ${width} pt phone the breadcrumb never clips a crumb, even with her longest place name`, async ({ page }) => {
+  test(`on a ${width} pt phone the breadcrumb never clips a crumb, even with her longest place name (Banff and Kananaskis)`, async ({ page }) => {
     await stubTiles(page);
     await page.setViewportSize({ width, height: 874 });
     await page.goto("/#/lab/sketch");
     await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
     const list = page.getByTestId("sketch-routes");
-    await list.getByRole("button", { name: /^Japan,/ }).click();
-    await list.getByRole("button", { name: /^Japan, place not named,/ }).click();
+    await list.getByRole("button", { name: /^Canada,/ }).click();
+    await list.getByRole("button", { name: /^Banff and Kananaskis,/ }).click();
     await list.locator(".sketch-chip").first().click();
     const crumbs = page.getByRole("group", { name: "Where to look" });
     const street = crumbs.getByRole("button", { name: "Street" });
     await expect(street).toHaveAttribute("aria-current", "location");
     // The deepest crumb is whole on screen, and no crumb wraps onto two lines.
     await expect.poll(async () => { const box = (await street.boundingBox())!; return box.x >= 0 && box.x + box.width <= width; }).toBe(true);
+    // At 360 the row is wider than the screen, so this really checks the scroll.
+    if (width === 360) expect(await crumbs.evaluate((row) => row.scrollWidth > row.clientWidth)).toBe(true);
     const exit = (await page.getByRole("button", { name: "Exit" }).boundingBox())!;
     for (const crumb of await crumbs.getByRole("button").all()) expect((await crumb.boundingBox())!.height).toBeCloseTo(exit.height, 0);
   });
@@ -360,6 +366,25 @@ test("on the ridge a tap of the marker plays or pauses, a touch elsewhere takes 
   expect(after).toBeGreaterThan(8.5);
   expect(after).toBeLessThan(10.5);
   await expect(play).toHaveAccessibleName("Play");
+});
+
+test("her route named only \"Japan\" is in Kyoto now, as she decided: its card, Jump in and its ridge line", async ({ page }) => {
+  test.setTimeout(90_000);
+  await installGoogleReplay(page, "ready");
+  await stubTiles(page);
+  await page.goto("/#/lab/sketch");
+  await expect(world(page)).toHaveAttribute("data-map-phase", "ready");
+  const list = page.getByTestId("sketch-routes");
+  await list.getByRole("button", { name: /^Japan,/ }).click();
+  // No place left without a name; Tokyo has gained the other one.
+  await expect(list.getByRole("button", { name: /place not named/ })).toHaveCount(0);
+  await expect(list.getByRole("button", { name: /^Tokyo, 4 routes$/ })).toBeVisible();
+  await list.getByRole("button", { name: /^Kyoto, 3 routes$/ }).click();
+  const racing = list.locator(`.sketch-chip[data-slug="${RACING.slug}"]`);
+  await racing.click();
+  await page.getByTestId("sketch-jump").click();
+  await expect(page.locator("[data-jump-phase]")).toHaveAttribute("data-jump-phase", "realm", { timeout: 30_000 });
+  await expect(page.getByTestId("sketch-ridge")).toHaveAttribute("aria-valuetext", / km/, { timeout: 15_000 });
 });
 
 test("choosing a route and jumping in hands over to the 3D replay; Back returns to the sketch at that route", async ({ page }) => {

@@ -18,7 +18,7 @@ import { applySketchStyle } from "@/labs/sketch/sketch-apply";
 import { cityView, regionView, routeStartView, type SketchCamera } from "@/labs/sketch/sketch-camera";
 import { streetCamera } from "@/labs/sketch/sketch-street-camera";
 import { atlasFromRoute, crumbsOf, initialAtlasState, reduceAtlas, type AtlasState } from "@/labs/sketch/sketch-atlas-state";
-import { groupPlaces, placeOf } from "@/labs/sketch/sketch-places";
+import { groupPlaces, placeFor } from "@/labs/sketch/sketch-places";
 import { createEdgeLayer } from "@/labs/sketch/sketch-edge-layer";
 import { initialSketchMapState, reduceSketchMap } from "@/labs/sketch/sketch-map-state";
 import { sketchOptions, withOption, type SketchLook } from "@/labs/sketch/sketch-options";
@@ -67,7 +67,7 @@ const routesLabel = (count: number) => `${count} route${count === 1 ? "" : "s"}`
 function atlasOf(slug: string | null): AtlasState {
   const entry = slug ? ENTRIES.find((candidate) => candidate.slug === slug) : undefined;
   if (!entry) return initialAtlasState();
-  const { place, country } = placeOf(entry.place);
+  const { place, country } = placeFor(entry.slug, entry.place);
   return atlasFromRoute({ slug: entry.slug, place, country: country ?? "Unplaced" });
 }
 
