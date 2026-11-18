@@ -18,7 +18,7 @@ import { applySketchStyle } from "@/labs/sketch/sketch-apply";
 import { cityView, regionView, routeStartView, type SketchCamera } from "@/labs/sketch/sketch-camera";
 import { streetCamera } from "@/labs/sketch/sketch-street-camera";
 import { atlasFromRoute, crumbsOf, initialAtlasState, reduceAtlas, type AtlasState } from "@/labs/sketch/sketch-atlas-state";
-import { atlasRoutes, groupPlaces, placeFor } from "@/labs/sketch/sketch-places";
+import { atlasRoutes, groupPlaces, placeFor, withOwnerPlace } from "@/labs/sketch/sketch-places";
 import { createEdgeLayer } from "@/labs/sketch/sketch-edge-layer";
 import { initialSketchMapState, reduceSketchMap } from "@/labs/sketch/sketch-map-state";
 import { sketchOptions, withOption, type SketchLook } from "@/labs/sketch/sketch-options";
@@ -751,7 +751,7 @@ function SketchWorld({ realmSlug }: { realmSlug?: string }) {
           container={rootElement}
           cover={unavailable ? undefined : jumpCover}
           entrance={realmState?.via === "jump" ? "dive" : "direct"}
-          entry={realmEntry}
+          entry={withOwnerPlace(realmEntry)}
           map={jumpMap}
           miniMapRect={() => undefined}
           onCover={setCover}

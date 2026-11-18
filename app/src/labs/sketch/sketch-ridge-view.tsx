@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, u
 
 import type { QuestRoute } from "@/domain/route";
 import { scrubKeyTarget } from "@/labs/sketch/sketch-replay-controls";
-import { clockAt, effortColour, findStops, gradesOf, progressAtX, ridgeWindow, sampleRidge, scrubBy, tickStep, verticalRange } from "@/labs/sketch/sketch-ridge";
+import { clockAt, effortColour, findStops, gradesOf, progressAtX, readoutCentre, ridgeWindow, sampleRidge, scrubBy, tickStep, verticalRange } from "@/labs/sketch/sketch-ridge";
 import { HOLD_MS, initialRidgeGesture, reduceRidgeGesture, type RidgeEffect, type RidgeGestureEvent } from "@/labs/sketch/sketch-ridge-gesture";
 
 const INK = "#1d1d1f";
@@ -270,6 +270,15 @@ export function SketchRidge({ route, progressM, totalM, playing, reducedMotion, 
 
   // One pointer: the gesture reducer decides; this applies its effects.
   const [gesture, send] = useReducer((state: ReturnType<typeof initialRidgeGesture>, event: RidgeGestureEvent) => reduceRidgeGesture(state, event).state, undefined, initialRidgeGesture);
+  // The pill's own width, so it can stop short of the screen edge: with a
+  // clock it is wider than without, and wider again in larger type.
+  const readoutRef = useRef<HTMLParagraphElement>(null);
+  const [readoutWidth, setReadoutWidth] = useState(192);
+  const hasClock = Boolean(clock);
+  useLayoutEffect(() => {
+    const measured = readoutRef.current?.offsetWidth;
+    if (measured && Math.abs(measured - readoutWidth) > 1) setReadoutWidth(measured);
+  }, [hasClock, width, readoutWidth]);
   const gestureRef = useRef(gesture);
   gestureRef.current = gesture;
   const viewRef = useRef(view);
@@ -345,7 +354,7 @@ export function SketchRidge({ route, progressM, totalM, playing, reducedMotion, 
       tabIndex={0}
     >
       <canvas aria-hidden="true" ref={canvasRef} style={{ width, height: lineHeight }} />
-      <p aria-hidden="true" className="sketch-ridge-readout" style={{ left: Math.min(width - 96, Math.max(96, markerX)), top: Math.max(2, markerY - MARKER - 36) }}>
+      <p aria-hidden="true" className="sketch-ridge-readout" ref={readoutRef} style={{ left: readoutCentre(markerX, width, readoutWidth), top: Math.max(2, markerY - MARKER - 36) }}>
         {clock ? <b>{clock} · </b> : null}
         {km(progressM)} km · {Math.round(here.elev)} m
       </p>

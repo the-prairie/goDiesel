@@ -113,6 +113,11 @@ export function placeFor(slug: string, region: string, decisions: Readonly<Recor
   return decisions[slug] ?? placeOf(region);
 }
 
+/** A route's entry carrying the place name the atlas shows, for anything that prints it. */
+export function withOwnerPlace<T extends { slug: string; place: string }>(entry: T, decisions: Readonly<Record<string, PlaceDecision>> = OWNER_PLACES): T {
+  return { ...entry, place: placeFor(entry.slug, entry.place, decisions).place };
+}
+
 export function placeOf(region: string): { place: string; country: string | null } {
   if (WHOLE[region]) return WHOLE[region];
   const comma = region.lastIndexOf(", ");

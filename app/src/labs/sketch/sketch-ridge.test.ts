@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clockAt, effortColour, findStops, gradesOf, progressAtX, ridgeWindow, sampleRidge, scrubBy, tickStep, verticalRange } from "@/labs/sketch/sketch-ridge";
+import { clockAt, effortColour, findStops, gradesOf, progressAtX, readoutCentre, ridgeWindow, sampleRidge, scrubBy, tickStep, verticalRange } from "@/labs/sketch/sketch-ridge";
 
 // A 10 km line: flat, a 1 km climb of 100 m (10%), flat, a 1 km descent, flat.
 const route = Array.from({ length: 101 }, (_, i) => {
@@ -118,5 +118,22 @@ describe("dragging", () => {
     expect(progressAtX(100, 400, { d0: 0, span: 32_000 })).toBe(8000);
     expect(scrubBy(20_000, 40, 400, { d0: 17_000, span: 6000 }, 32_000)).toBe(20_600);
     expect(scrubBy(31_900, 400, 400, { d0: 26_000, span: 6000 }, 32_000)).toBe(32_000);
+  });
+});
+
+describe("readoutCentre", () => {
+  it("rides above the marker while the whole pill fits", () => {
+    expect(readoutCentre(195, 390, 194)).toBe(195);
+  });
+
+  it("stops a margin short of either screen edge, however wide the pill is", () => {
+    // The pill with a clock is about 194 pt wide: its left end stays 8 pt in.
+    expect(readoutCentre(4, 390, 194)).toBe(105);
+    expect(readoutCentre(388, 390, 194)).toBe(285);
+    expect(readoutCentre(4, 390, 120)).toBe(68);
+  });
+
+  it("sits in the middle of a strip narrower than the pill", () => {
+    expect(readoutCentre(10, 180, 194)).toBe(90);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { routes } from "@/data/routes";
 import { buildOverlandEntries } from "@/labs/overland/model/overland-entries";
-import { OWNER_HIDDEN, OWNER_PLACES, OWNER_RUNS, atlasRoutes, groupPlaces, placeFor, placeOf } from "@/labs/sketch/sketch-places";
+import { OWNER_HIDDEN, OWNER_PLACES, OWNER_RUNS, atlasRoutes, groupPlaces, placeFor, placeOf, withOwnerPlace } from "@/labs/sketch/sketch-places";
 
 describe("her places and countries, from the routes' own region names", () => {
   it("reads 'Place, Country' and 'Place, State or Province' by exact tables, never by guessing", () => {
@@ -71,6 +71,12 @@ describe("the owner's decisions on where a route belongs", () => {
   it("reads a route's place through her decisions", () => {
     expect(placeFor("17626995684", "Japan")).toEqual({ place: "Kyoto", country: "Japan" });
     expect(placeFor("someone-else", "Rome, Italy")).toEqual({ place: "Rome", country: "Italy" });
+  });
+
+  it("gives a route's entry the place name the atlas shows, so the jump card and the breadcrumb agree", () => {
+    expect(withOwnerPlace({ slug: "x", place: "Banff/Kananaskis", km: 20.7 })).toEqual({ slug: "x", place: "Banff and Kananaskis", km: 20.7 });
+    expect(withOwnerPlace({ slug: "17626995684", place: "Japan" }).place).toBe("Kyoto");
+    expect(withOwnerPlace({ slug: "x", place: "Kyoto, Japan" }).place).toBe("Kyoto");
   });
 
   it("can name a place the data does not have yet, and drops a place left with no routes", () => {

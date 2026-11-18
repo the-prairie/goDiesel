@@ -108,6 +108,15 @@ export function tickStep(spanM: number) {
   return [1, 2, 5, 10, 25, 50, 100].find((step) => spanM / 1000 / step <= 8) ?? 100;
 }
 
+/**
+ * Where the readout pill is centred: above the marker, but never closer than
+ * a margin to either edge of the strip, whatever the pill's own width.
+ */
+export function readoutCentre(markerX: number, width: number, pillWidth: number, margin = 8) {
+  const reach = pillWidth / 2 + margin;
+  return width < reach * 2 ? width / 2 : clamp(markerX, reach, width - reach);
+}
+
 /** Where a touch at x puts her, at rest. */
 export function progressAtX(x: number, width: number, view: { d0: number; span: number }) {
   return view.d0 + (clamp(x, 0, width) / width) * view.span;

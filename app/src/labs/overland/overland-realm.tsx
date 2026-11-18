@@ -410,7 +410,8 @@ export default function OverlandRealm({ route, entry, jumpId, phase, presentatio
                   <span>{content.heading}</span>
                 </p>
                 <p className="sketch-box-title">{content.title}</p>
-                {content.body ? <p className="sketch-box-body">{content.body}</p> : null}
+                {/* The distance and its unit stay together when the line wraps. */}
+                {content.body ? <p className="sketch-box-body">{content.body.replace(/ km$/, "\u00a0km")}</p> : null}
               </div>
             ) : (
               <canvas aria-hidden="true" className="overland-pixels" height={boxHeight} ref={boxRef} style={{ width: "100%", height: "100%" }} width={boxWidth} />
