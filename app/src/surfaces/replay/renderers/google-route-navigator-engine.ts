@@ -90,16 +90,25 @@ const INTERACTIVE_PALETTES = {
     outerColor: "#182126",
     outerWidth: 0.22,
   },
+  // Production Replay and the jump's replay: the run in her red, the way
+  // ahead in white, both cased dark so the line reads on pale streets and on
+  // dark forest alike; the last stretch behind her a little brighter.
   immersive: {
-    colors: { guide: "#f5f1e4", future: "#f5f1e4", thread: "rgba(210, 198, 167, 0.72)", glint: "#fffdf5" },
-    widths: { guide: 2, future: 2.75, thread: 2, glint: 4 },
+    colors: { guide: "rgba(255, 255, 255, 0.92)", future: "rgba(255, 255, 255, 0.92)", thread: "#d9412b", glint: "#f0634a" },
+    // In screen points: scaled by the device pixel ratio below, as Google draws in device pixels.
+    widths: { guide: 3, future: 3, thread: 4.5, glint: 5.5 },
     clearanceM: { guide: 1.25, future: 1.25, thread: 1.25, glint: 1.25 },
-    outerColor: "rgba(20, 27, 29, 0.65)",
-    outerWidth: 0.18,
+    outerColor: "rgba(16, 22, 24, 0.7)",
+    outerWidth: 0.45,
   },
 } as const;
 
 type InteractivePalette = keyof typeof INTERACTIVE_PALETTES;
+
+/** Device pixels per screen point, for Google's line widths; 1 to 3. */
+function pointScale() {
+  return Math.min(3, Math.max(1, (globalThis as { devicePixelRatio?: number }).devicePixelRatio || 1));
+}
 
 const GOOGLE_SCENE_READY_TIMEOUT_MS = 30_000;
 
@@ -236,6 +245,8 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
           roles: routeStyle.palette === "immersive"
             ? ["future", "thread", "glint"]
             : ["guide", "future", "thread", "glint"],
+          // Her line stays readable where tree canopy or a roof stands over the ground.
+          drawsOccludedSegments: routeStyle.palette === "immersive",
         });
         if (routeStyle.palette === "immersive") {
           const marker = new MarkerElement({
@@ -392,7 +403,7 @@ class BrowserGoogleRouteNavigatorEngine implements GoogleRouteNavigatorEngine {
         layer.endRatio = style.endRatio;
       }
       layer.element.strokeColor = palette?.colors[layer.role] ?? style.color;
-      layer.element.strokeWidth = palette?.widths[layer.role] ?? style.width;
+      layer.element.strokeWidth = palette ? palette.widths[layer.role] * (this.palette === "immersive" ? pointScale() : 1) : style.width;
       layer.element.outerColor = palette?.outerColor ?? style.outerColor;
       layer.element.outerWidth = palette?.outerWidth ?? style.outerWidth;
       const opacity = this.palette === "immersive"
@@ -445,7 +456,9 @@ function createFilamentLayers({
   map,
   routePath,
   roles,
+  drawsOccludedSegments = false,
 }: {
+  drawsOccludedSegments?: boolean;
   Polyline3DElement: typeof google.maps.maps3d.Polyline3DElement;
   altitudeMode: google.maps.maps3d.AltitudeMode;
   map: google.maps.maps3d.Map3DElement;
@@ -459,7 +472,7 @@ function createFilamentLayers({
       strokeWidth: 1,
       outerWidth: 0,
       altitudeMode,
-      drawsOccludedSegments: false,
+      drawsOccludedSegments,
       geodesic: false,
       zIndex: 10 + index,
     });

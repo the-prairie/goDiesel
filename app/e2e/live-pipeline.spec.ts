@@ -349,6 +349,17 @@ test.describe("real source to live provider pipeline", () => {
       body: "{",
     });
     expect(malformedResponse.status).toBe(400);
+    // Her planted moments (ADR-0010, widened): the same guards on the same writer.
+    const momentsUrl = `${adminOrigin}/api/admin/moments`;
+    const appOrigin = { "Content-Type": "application/json", Origin: "http://127.0.0.1:8787" };
+    expect((await fetch(momentsUrl, { method: "PUT", headers: { "Content-Type": "application/json", Origin: "https://attacker.invalid" }, body: "{}" })).status).toBe(403);
+    expect((await fetch(momentsUrl, { method: "PUT", headers: appOrigin, body: "x".repeat(1_048_577) })).status).toBe(413);
+    expect((await fetch(momentsUrl, { method: "PUT", headers: appOrigin, body: "{" })).status).toBe(400);
+    expect((await fetch(momentsUrl, { method: "PUT", headers: appOrigin, body: JSON.stringify({ catalog: [], placements: [{ id: "p", entryId: "gone", at: { lng: 0, lat: 0 }, facingDeg: 0 }] }) })).status).toBe(400);
+    // A valid write lands in the isolated workspace's private folder and reads back.
+    const example = { catalog: [{ id: "live-gate", kind: "tv-wall", title: "Live gate", clip: null }], placements: [{ id: "live-gate-place", entryId: "live-gate", at: { lng: 135.77, lat: 35 }, facingDeg: 185 }] };
+    expect((await fetch(momentsUrl, { method: "PUT", headers: appOrigin, body: JSON.stringify(example) })).status).toBe(200);
+    expect(await (await fetch(momentsUrl, { headers: { Origin: "http://127.0.0.1:8787" } })).json()).toEqual({ moments: example });
     expect((await fetch(`${adminOrigin}/api/admin/status`)).ok).toBe(true);
 
     const network = startNetworkProof(page);

@@ -348,6 +348,7 @@ def test_status_names_the_serving_checkout_and_process(admin, served):
         "rebuild",
         "checkout_root",
         "pid",
+        "strava_export",
     }
 
 

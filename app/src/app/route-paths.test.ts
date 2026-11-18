@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { atlasReturnPath, overlandEntryPath, overlandRealmPath, overlandTownPath, overlandTownRealmPath, overlandWorldPath, replayPath } from "@/app/route-paths";
+import { atlasReturnPath, sketchRealmPath, sketchWorldPath, overlandEntryPath, overlandRealmPath, overlandTownPath, overlandTownRealmPath, overlandWorldPath, replayPath } from "@/app/route-paths";
 
 describe("Atlas replay navigation", () => {
   it("carries a selected Atlas URL into Replay", () => {
@@ -44,5 +44,17 @@ describe("Overland lab paths", () => {
     expect(overlandTownPath("kyoto-japan")).toBe("/lab/overland/town/kyoto-japan");
     expect(overlandTownPath("kyoto-japan", "17636880071")).toBe("/lab/overland/town/kyoto-japan?sign=17636880071");
     expect(overlandTownRealmPath("kyoto-japan", "a b")).toBe("/lab/overland/town/kyoto-japan/a%20b/3d");
+  });
+});
+
+describe("sketch world paths", () => {
+  it("keeps the review options and the chosen route in the world's URL", () => {
+    expect(sketchWorldPath()).toBe("/lab/sketch");
+    expect(sketchWorldPath("review=1&look=pencil")).toBe("/lab/sketch?review=1&look=pencil");
+  });
+
+  it("opens a route's 3D world below the sketch, keeping the options", () => {
+    expect(sketchRealmPath("a b", "review=1")).toBe("/lab/sketch/a%20b/3d?review=1");
+    expect(sketchRealmPath("x")).toBe("/lab/sketch/x/3d");
   });
 });

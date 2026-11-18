@@ -42,6 +42,7 @@ from admin_geocode import (
     write_json_atomic,
 )
 from admin_curation import curation_readiness, save_curation_and_rebuild, write_atomic
+from admin_moments import read_moments, write_moments
 from route_regions import classify_region
 import hashlib
 import tempfile
@@ -129,14 +130,26 @@ def parse_strava_date(s):
         return None
 
 
-print('Loading activities.csv…')
-df = pd.read_csv(DD / 'activities.csv', low_memory=False)
-df['date'] = df['Activity Date'].apply(parse_strava_date)
-df['act_id'] = df['Filename'].fillna('').astype(str).apply(
-    lambda s: re.match(r'.*?/(\d+)', s).group(1) if re.match(r'.*?/(\d+)', s) else None
+# Route curation reads her Strava export; placing moments does not. Without
+# the export the writer still starts, serves status and moments, and refuses
+# the curation routes with this message (ADR-0010).
+STRAVA_EXPORT = (DD / 'activities.csv').is_file()
+NO_EXPORT_MESSAGE = (
+    f'The Strava export ({DD / "activities.csv"}) is not on this machine, '
+    'so route curation is unavailable. Placing moments still works.'
 )
-acts_by_id = {r['act_id']: r for _, r in df.iterrows() if r['act_id']}
-print(f'  {len(acts_by_id)} activities indexed.')
+if STRAVA_EXPORT:
+    print('Loading activities.csv…')
+    df = pd.read_csv(DD / 'activities.csv', low_memory=False)
+    df['date'] = df['Activity Date'].apply(parse_strava_date)
+    df['act_id'] = df['Filename'].fillna('').astype(str).apply(
+        lambda s: re.match(r'.*?/(\d+)', s).group(1) if re.match(r'.*?/(\d+)', s) else None
+    )
+    acts_by_id = {r['act_id']: r for _, r in df.iterrows() if r['act_id']}
+    print(f'  {len(acts_by_id)} activities indexed.')
+else:
+    acts_by_id = {}
+    print(f'No activities.csv: {NO_EXPORT_MESSAGE}')
 
 
 def find_activity_file_early(aid):
@@ -211,9 +224,13 @@ def build_geo_cache():
     return cache
 
 
-print('Loading geo cache…')
-geo_cache = build_geo_cache()
-print(f'  {sum(1 for v in geo_cache.values() if v.get("region")):,} routes geo-tagged.')
+if STRAVA_EXPORT:
+    print('Loading geo cache…')
+    geo_cache = build_geo_cache()
+    print(f'  {sum(1 for v in geo_cache.values() if v.get("region")):,} routes geo-tagged.')
+else:
+    # Building it now would record every route as having no start point.
+    geo_cache = {}
 
 
 # ── Reverse-geocoding (Nominatim, rate-limited, persistent bucket cache) ──
@@ -649,7 +666,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
         self.end_headers()
 
     def do_GET(self):
@@ -661,6 +678,9 @@ class Handler(BaseHTTPRequestHandler):
         if path in ADMIN_ASSETS:
             asset = (QUESTS / ADMIN_ASSETS[path]).read_bytes()
             self._send(200, asset, 'text/javascript; charset=utf-8')
+            return
+        if not STRAVA_EXPORT and (path in ('/api/routes', '/api/classify-status') or path.startswith('/api/polyline/')):
+            self._send(503, {'error': NO_EXPORT_MESSAGE})
             return
         if path == '/api/routes':
             self._send(200, routes_summary())
@@ -677,6 +697,7 @@ class Handler(BaseHTTPRequestHandler):
                 ),
                 'rebuild': _rebuild_snapshot(),
                 'checkout_root': str(QUESTS),
+                'strava_export': STRAVA_EXPORT,
                 'pid': os.getpid(),
             })
             return
@@ -685,6 +706,16 @@ class Handler(BaseHTTPRequestHandler):
             svg = polyline_svg(aid)
             self._send(200, svg or '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
                        'image/svg+xml')
+            return
+        if path == '/api/admin/moments':
+            # Her private moments file, for the sketch world's review mode.
+            if not self._origin_allowed():
+                self._send(403, {'error': 'origin not allowed'})
+                return
+            try:
+                self._send(200, {'moments': read_moments(QUESTS)})
+            except (OSError, ValueError) as error:
+                self._send(500, {'error': f'moments file unreadable: {error}'})
             return
         if path == '/api/classify-status':
             unmapped_now = len(_unmapped_route_ids())
@@ -755,10 +786,49 @@ class Handler(BaseHTTPRequestHandler):
             'had_time': photo.get('taken_utc') is not None,
         })
 
+    def do_PUT(self):
+        """Replace her moments file: whole, valid, atomic, under the owner lock."""
+        path = urlparse(self.path).path
+        if not self._origin_allowed():
+            self._send(403, {'error': 'origin not allowed'})
+            return
+        if path != '/api/admin/moments':
+            self._send(404, {'error': 'not found'})
+            return
+        try:
+            n = int(self.headers.get('Content-Length', 0))
+        except ValueError:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if n <= 0:
+            self._send(400, {'error': 'invalid Content-Length'})
+            return
+        if n > MAX_POST_BYTES:
+            self._send(413, {'error': 'request body too large'})
+            return
+        if not OWNER_MUTATION_LOCK.acquire(blocking=False):
+            self._send(409, _mutation_busy_body())
+            return
+        try:
+            data = json.loads(self.rfile.read(n).decode('utf-8'))
+            write_moments(QUESTS, data)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            self._send(400, {'error': str(error)})
+            return
+        except OSError as error:
+            self._send(500, {'error': f'moments file not written: {error}'})
+            return
+        finally:
+            OWNER_MUTATION_LOCK.release()
+        self._send(200, {'ok': True, 'moments': data})
+
     def do_POST(self):
         path = urlparse(self.path).path
         if not self._origin_allowed():
             self._send(403, {'error': 'origin not allowed'})
+            return
+        if not STRAVA_EXPORT:
+            self._send(503, {'error': NO_EXPORT_MESSAGE})
             return
         # Media arrives as raw bytes, so it is handled before the UTF-8 decode
         # that every JSON endpoint depends on.

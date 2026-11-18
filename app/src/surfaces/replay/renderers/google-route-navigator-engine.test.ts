@@ -154,7 +154,8 @@ describe("Google renderer lifecycle adapter", () => {
     expect(marker).toMatchObject({ altitudeMode: "relative-ground", anchorTop: "-50%", title: "Current route position" });
     expect(marker.position.altitude).toBe(1.6);
     for (const layer of [future, traveled, glint]) {
-      expect(layer).toMatchObject({ altitudeMode: "relative-ground", drawsOccludedSegments: false });
+      // Drawn where canopy or a roof stands over the ground (round 9), so her line never vanishes in a forest.
+      expect(layer).toMatchObject({ altitudeMode: "relative-ground", drawsOccludedSegments: true });
       expect(layer.path.every(({ altitude }) => altitude === 1.25)).toBe(true);
     }
     run.engine.setGrounding("mesh");
@@ -245,6 +246,50 @@ describe("Google renderer lifecycle adapter", () => {
     expect(traveled).toMatchObject({ strokeColor: palette === "neutral" ? "#f5f5f5" : "#f06b50", altitudeMode: "ground", style: { opacity: "0.92" } });
     expect(traveled.path.every(({ altitude }) => altitude === 0.2)).toBe(true);
     expect(glint.path[0]).not.toEqual(glint.path.at(-1));
+  });
+
+  it("draws the immersive route so it reads on pale streets and dark forest: run in her red, ahead in white, both cased", async () => {
+    const run = mount({ groundingMode: "ground", routeStyle: { mode: "filament", palette: "immersive", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
+    const map = await sceneCreated();
+    steady(map);
+    await run.done;
+    run.engine.setCinematicRoute(googleRouteThreadTreatment(route, {
+      ...initialGoogleRouteNavigatorState(), cameraMode: "chase", progressM: 26_000,
+    }));
+    type Line = FakeElement & { strokeColor: string; strokeWidth: number; outerColor: string; outerWidth: number };
+    const byRole = (role: string) => map.children.find((child) => child.dataset?.threadLayer === role) as Line;
+    const run_ = byRole("thread");
+    const ahead = byRole("future");
+    expect(run_.strokeColor).toBe("#d9412b");
+    expect(run_.strokeWidth).toBeGreaterThanOrEqual(4.5);
+    expect(ahead.strokeColor).toMatch(/^rgba\(255, 255, 255, 0\.9\d?\)$/);
+    expect(ahead.strokeWidth).toBeGreaterThanOrEqual(3);
+    for (const line of [run_, ahead]) {
+      expect(line.outerWidth).toBeGreaterThanOrEqual(0.4);
+      expect(line.outerColor).toMatch(/^rgba\(1\d, 2\d, 2\d, 0\.[6-9]\d?\)$/);
+    }
+  });
+
+  it("sizes the immersive route in screen points, so a phone's dense pixels do not thin it, and shows it through tree canopy", async () => {
+    vi.stubGlobal("devicePixelRatio", 3);
+    try {
+      const run = mount({ groundingMode: "ground", routeStyle: { mode: "filament", palette: "immersive", color: "#fff", outerColor: "#fff", outerWidth: 0, width: 2 } });
+      const map = await sceneCreated();
+      steady(map);
+      await run.done;
+      run.engine.setCinematicRoute(googleRouteThreadTreatment(route, {
+        ...initialGoogleRouteNavigatorState(), cameraMode: "chase", progressM: 26_000,
+      }));
+      type Line = FakeElement & { strokeWidth: number; drawsOccludedSegments: boolean };
+      const ran = map.children.find((child) => child.dataset?.threadLayer === "thread") as Line;
+      const ahead = map.children.find((child) => child.dataset?.threadLayer === "future") as Line;
+      expect(ran.strokeWidth).toBeCloseTo(4.5 * 3, 5);
+      expect(ahead.strokeWidth).toBeCloseTo(3 * 3, 5);
+      expect(ran.drawsOccludedSegments).toBe(true);
+      expect(ahead.drawsOccludedSegments).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it.each([

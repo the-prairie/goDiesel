@@ -1,0 +1,81 @@
+.moments-catalog {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  background: #f6f5ef;
+  padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left));
+  color: #1b1a17;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.moments-catalog > * {
+  max-width: 640px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.moments-catalog h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+}
+
+.moments-note,
+.moments-meta {
+  margin: 0 0 16px;
+  color: #62655f;
+  font-size: 14px;
+}
+
+.moments-list {
+  display: flex;
+  margin: 0 0 24px;
+  padding: 0;
+  flex-direction: column;
+  gap: 12px;
+  list-style: none;
+}
+
+.moments-card {
+  display: flex;
+  padding: 12px;
+  border: 1px solid #d6d7d1;
+  border-radius: 14px;
+  background: #fff;
+  gap: 14px;
+}
+
+.moments-preview {
+  display: grid;
+  width: 72px;
+  height: 128px;
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  background: #1b1a17;
+  object-fit: cover;
+  place-items: center;
+}
+
+.moments-preview-none {
+  color: #f6f5ef;
+  font: 600 12px ui-sans-serif, system-ui, sans-serif;
+  text-align: center;
+}
+
+.moments-text h2 {
+  margin: 0 0 2px;
+  font-size: 17px;
+}
+
+.moments-meta {
+  margin-bottom: 8px;
+}
+
+.moments-caption {
+  margin: 0 0 8px;
+  font-style: italic;
+}
+
+.moments-where {
+  margin: 0;
+  font-size: 14px;
+}

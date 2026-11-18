@@ -64,3 +64,25 @@ export function realmLayout({ width, height, safe }: RealmViewport, textBoxHeigh
   };
   return { textBox, controls };
 }
+
+const LEAVE_PX = 44;
+/** The ridge line's drawing: the readout above, the ridge, kilometre ticks below. */
+const RIDGE_PX = 156;
+
+/**
+ * The sketch skin's replay: leaving top-left, the route card beside it, and
+ * the ridge line edge to edge along the bottom on paper, above the home
+ * indicator. Google's map ends where the ridge begins, so its credit, which
+ * Map3DElement draws at the map's bottom and cannot move, stands on the map
+ * just above the ridge, uncovered.
+ */
+export function sketchRealmLayout({ width, height, safe }: RealmViewport) {
+  const leave: Rect = { left: safe.left + EDGE, top: safe.top + EDGE, width: LEAVE_PX, height: LEAVE_PX };
+  const cardLeft = leave.left + LEAVE_PX + GAP;
+  const card: Rect = { left: cardLeft, top: leave.top, width: Math.min(width - safe.right - EDGE - cardLeft, TEXT_BOX_MAX), height: 0 };
+  const ridgeHeight = RIDGE_PX + safe.bottom;
+  const ridge: Rect = { left: 0, top: height - ridgeHeight, width, height: ridgeHeight };
+  const ridgeLine: Rect = { left: 0, top: ridge.top, width, height: RIDGE_PX };
+  const map: Rect = { left: 0, top: 0, width, height: ridge.top };
+  return { leave, card, ridge, ridgeLine, map };
+}

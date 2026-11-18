@@ -37,6 +37,9 @@ node scripts/check-provider-key.mjs
 rm -rf dist
 mkdir -p dist
 cp -R app/dist/. dist/
+# Planted moments: only entries she flagged public, with their clips and
+# places, ship; her private catalog and clips stay on her machine.
+node app/scripts/moments-dist.mjs app/public/moments dist
 
 if [[ -n "$SINGLE_ROUTE_SLUG" ]]; then
   ROUTES_DIR="dist/data/routes"

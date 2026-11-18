@@ -24,6 +24,10 @@ const jump = (page: Page) => page.getByTestId("overland-jump");
 // The town's camera breathes, so signposts drift by a pixel or two: clicks do not wait for them to settle.
 const sign = (page: Page, number: string) => page.getByTestId("overland-town-signs").getByRole("button", { name: new RegExp(`^No\\. ${number}:`) });
 
+// The town is drawn by the CPU in the test browser: opening it alone takes 13 to 25 s, so the
+// default 30 s per test ran out at random, in a different test each time, whenever the machine was busy.
+test.describe.configure({ timeout: 90_000 });
+
 async function openTown(page: Page, query = "?quality=low") {
   await page.goto(`/#/lab/overland/town/${KYOTO.slug}${query}`);
   await expect(town(page)).toHaveAttribute("data-town-phase", "ready", { timeout: 30_000 });
